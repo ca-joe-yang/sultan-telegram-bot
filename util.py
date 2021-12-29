@@ -9,7 +9,7 @@ def message_info(message):
     c_id = message.chat.id
     u_id = message.from_user.id
     m_id = message.message_id
-    u_name = message.from_user.full_name
+    u_name = message.from_user.full_name.strip()
     return c_id, u_id, u_name, m_id
 
 def players_want2play_str(players):

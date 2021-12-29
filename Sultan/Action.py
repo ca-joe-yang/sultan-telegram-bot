@@ -1,73 +1,70 @@
 from enum import Enum
 
-class BotAction(Enum):
+ACTION_CONFIG = {
+    0: '<錯誤> 未定義',
 
-    IDLE = 0
-    ANNOUNCE = 1
-    PRIVATE = 2
-    ILLEGAL = 3
-    ERROR = 4
+    1: '<管理> 跳過',
+    2: '<通用> 查看',
+    3: '<通用> 教學',
+    4: '<一般> 取消',
+    
+    11: '<一般> 公開',
+    12: '<一般> 隱藏',
+    13: '<一般> 偷看',
+    14: '<一般> 交換',
+
+    21: '<蘇丹> 處決',
+    22: '<蘇丹> 登基',
+
+    31: '<守衛> 關押',
+
+    41: '<刺客> 刺殺',
+
+    51: '<奴隸> 號召',
+
+    61: '<販子> 抓捕',
+    62: '<販子> 狩獵',
+}
 
 class GameAction(Enum):
+    """Default"""
+    DEFAULT = 0
 
-    # General
-    PEEK = 1
-    SWITCH = 2
-    REVEAL = 3
-    HIDE = 4
+    """General action"""
+    SKIP = 1
+    CHECK = 2
+    TUTORIAL = 3
+    CANCEL = 4
+    
+    """Regular action"""
+    REVEAL = 11
+    HIDE = 12
+    PEEK = 13
+    SWITCH = 14
 
-    CHECK = 5
-    AVOID_DETAIN = 6
-    STOP_ASSASSINATE = 7
+    """Sultan action"""
+    EXECUTE = 21
+    THRONE = 22
 
-    # Sultan
-    EXECUTE = 11
-    THRONE = 12
+    """Guard action"""
+    DETAIN = 31
 
-    # Guard
-    DETAIN = 21
+    """Assassinate action"""
+    ASSASSINATE = 41
 
-    # Assassin
-    ASSASSINATE = 31
+    """Slave action"""
+    CALL = 51
 
-    # SLAVE
-    CALL = 41
-    JOIN = 42
+    """Slave driver action"""
+    CAPTURE = 61
+    HUNT = 62
+
+    @classmethod
+    def _missing_(cls, value):
+        return GameAction.DEFAULT
 
     def __str__(self):
-        if self.value == 1:
-            return '<一般> 偷看'
-        elif self.value == 2:
-            return '<一般> 交換'
-        elif self.value == 3:
-            return '<一般> 公開'
-        elif self.value == 4:
-            return '<一般> 隱藏'
-
-        elif self.value == 6:
-            return '<被動> 避免關押'
-        elif self.value == 7:
-            return '<被動> 阻止刺殺'
-        elif self.value == 8:
-            return '<被動> 登基'
-        
-        elif self.value == 11:
-            return '<蘇丹> 處決'
-        
-        elif self.value == 21:
-            return '<守衛> 關押'
-        
-        elif self.value == 31:
-            return '<刺客> 刺殺'
-        
-        elif self.value == 41:
-            return '<奴隸> 號召'
-        elif self.value == 42:
-            return '<奴隸> 響應'
-
-        return f'[動作] {self.value} 未定義'
-
-        # elif self.value == 5:
-        #     return '偷看'
-        # elif self.value == 6:
-        #     return '交換'
+        if self.value in ACTION_CONFIG:
+            return ACTION_CONFIG[self.value]
+        else:
+            return ACTION_CONFIG[0]

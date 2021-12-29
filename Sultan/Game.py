@@ -7,13 +7,8 @@ import numpy as np
 
 class SultanGame:
 
-    def __init__(self, chat_id, admin_id, admin_name):
-
-        # self.game_id = -1
-        self.chat_id = chat_id
-        self.admin_id = admin_id
-        self.admin_name = admin_name
-
+    def __init__(self, debug=False):
+        self.debug = debug
         self.reset()
 
     def check_state(self, state):
@@ -29,22 +24,20 @@ class SultanGame:
         self.msg_id = {}
         self.players = {}
         
-        self.last_swicth_pair = (0, 0)
+        self.last_switch_pair = (0, 0)
         self.current_player_index = -1
 
         self.winner = None
         self.crown_token = None
-        self.sultan = None
+        self.sultan_id = None
 
     def start_game(self):
-        self.players[0] = Player(user_id=0, user_name='白板', spare=True)
-        self.player_order = [ user_id for user_id in self.players if user_id != 0 ]
-        np.random.shuffle(self.player_order)
+        self.players[0] = Player(user_id=0, user_name='白板', spare=True, debug=self.debug)
+        self.player_orders = [ user_id for user_id in self.players if user_id != 0 ]
+        np.random.shuffle(self.player_orders)
 
-        count = 0
-        for i, user_id in enumerate(self.player_order):
-            count += 1
-            self.players[user_id].order = count
+        for i, user_id in enumerate(self.player_orders):
+            self.players[user_id].order = i
         
         character_count_ref = CHARACTER_COUNT_DICTIONARY[len(self.players)-1]
         tmp = []
@@ -53,121 +46,94 @@ class SultanGame:
                 tmp.append(character)
 
         np.random.shuffle(tmp)
-        for i, (user_id, player) in enumerate(self.players.items()):
-            player.character = tmp[i]
+        admin_character = None #Character.SULTAN
 
-        self.next_player()
+        if admin_character is not None:
+            self.players[1422967494].character = admin_character
+            tmp.remove(admin_character)
 
-    def dead_player(self, user_id):
-        count = 0
-        for i, user_id in enumerate(self.player_order):
-            if self.players[user_id].is_alive():
-                count += 1
-                self.players[user_id].order = count
+        i = 0
+        for _, (user_id, player) in enumerate(self.players.items()):
+            if user_id != 1422967494 or admin_character is None:
+                player.character = tmp[i]
+                i += 1
 
-    def next_player(self):
-        self.current_player_index = (self.current_player_index + 1) % len(self.player_order)
-        if self.crown_token == self.current_player().user_id:
-            if self.players[self.sultan].can_throne():
+        self.current_player_index = 0
+
+    def check_win_condition(self, only_revolution=False):
+        ### Revolution
+        for p in self.player_orders:
+            if self.players[p].is_free_slave():
+                neighbors = self.get_neighbors(p)
+                if len(neighbors) == 2 \
+                and self.players[neighbors[0]].is_free_slave() \
+                and self.players[neighbors[1]].is_free_slave():
+                    self.winner = 'rebel'
+                    self.win_condition = '革命成功'
+                    return True
+        if only_revolution:
+            return False
+
+        ### Sultan
+        if self.current_player().throne_countdown == 0:
+            if self.sultan_id is not None and self.players[self.sultan_id].can_throne():
                 self.winner = 'loyal'
-                return
+                self.win_condition = '蘇丹登基'
+                return True
             else:
-                self.crown_token = None
-                pass
-        if self.current_player().is_jail():
-            self.current_player().jail = False
-            self.next_player()
-        elif self.current_player().is_dead():
-            self.next_player()
-
-    def current_player(self):
-        user_id = self.player_order[self.current_player_index]
-        return self.players[user_id]
-
-    def neighbor(self, user_id, call=False):
-        order = self.player_order.index(user_id)
-
-        ret_ids = []
-        tmp = order
-        for i in range(len(self.player_order)-1):
-            tmp = (tmp + 1) % len(self.player_order)
-            tmp_id = self.player_order[tmp]
-            if self.players[tmp_id].is_alive() and self.players[tmp_id].is_free():
-                ret_ids.append(tmp_id)
-                break
+                self.current_player().throne_countdown = None
         
-        tmp = order
-        for i in range(len(self.player_order)-1):
-            tmp = (tmp_id - 1) % len(self.player_order)
-            tmp_id = self.player_order[tmp]
-            if self.players[tmp_id].is_alive() and self.players[tmp_id].is_free():
-                ret_ids.append(tmp_id)
-                break
-
-        ret_ids = set(ret_ids)
-        if call:
-            ret_ids.add(user_id)
-        elif user_id in ret_ids:
-            ret_ids.remove(user_id)
-        # ret_ids = list(ret_ids)
-        return ret_ids
-
-
-    def legal_player(self, action, player_id):
-        if action in [GameAction.PEEK, GameAction.SWITCH, GameAction.REVEAL, GameAction.HIDE]:
-            if self.admin_mode and player_id == self.admin_id:
-                return True
-            return player_id == self.current_player().user_id
-        elif action in [GameAction.CHECK]:
-            if player_id in self.players:
-                return True
-        elif action == GameAction.EXECUTE:
-            if (self.admin_mode and player_id == self.admin_id) or player_id == self.current_player().user_id:
-                return self.current_player().character == Character.SULTAN
-
-        elif action == GameAction.DETAIN:
-            if (self.admin_mode and player_id == self.admin_id) or player_id == self.current_player().user_id:
-                return self.current_player().character == Character.GUARD
-
-        elif action == GameAction.AVOID_DETAIN:
-            if (self.admin_mode and player_id == self.admin_id) or player_id == self.detain_id_pair[1]:
-                return True
-
-        elif action == GameAction.ASSASSINATE:
-            if (self.admin_mode and player_id == self.admin_id) or player_id == self.current_player().user_id:
-                return self.current_player().character == Character.ASSASSIN
-
-        elif action == GameAction.STOP_ASSASSINATE:
-            if player_id in self.assassinate_event['protector']:
-                return True
-
-        elif action == GameAction.CALL:
-            return self.players[player_id].character == Character.SLAVE
-
-        elif action == GameAction.JOIN:
-            if player_id in self.revolution_event['called']:
-                return True
-
+        ### Assassination
+        if self.sultan_id is not None and self.players[self.sultan_id].is_dead():
+            self.winner = 'rebel'
+            self.win_condition = '蘇丹已死'
+            return True
         return False
 
+    def next_player(self):
+        self.current_player_index = (self.current_player_index + 1) % len(self.player_orders)
 
-    def get_random_user_id_for_ai(self):
-        user_id = -1
-        while user_id in self.players:
-            user_id = user_id - 1
-        return user_id
+    def current_player(self):
+        user_id = self.player_orders[self.current_player_index]
+        return self.players[user_id]
+
+    def get_player_information(self, user_id):
+        ret = []
+        for target_id in self.player_orders:
+            ret.append(
+                f'{self.players[target_id].status(verbose=user_id == target_id)}')
+        for target_id in self.players:
+            if target_id not in self.player_orders and target_id != 0:
+                ret.append(
+                    f'{self.players[target_id].status(verbose=user_id == target_id)}')
+        return ret
+
+    def get_neighbors(self, user_id):
+        user_order = self.players[user_id].order
+        neighbor_order_1 = (user_order + 1) % len(self.player_orders)
+        neighbor_order_2 = (user_order - 1) % len(self.player_orders)
+
+        neighbors = [
+            self.player_orders[neighbor_order_1],
+            self.player_orders[neighbor_order_2]
+        ]
+        neighbors = list(set(neighbors))
+
+        return neighbors
 
     def add_player(self, user_id=None, user_name=None, ai=False):
-        if ai == True:
-            user_id = self.get_random_user_id_for_ai()
-            user_name = f'電腦{-user_id}'
-        self.players[user_id] = Player(user_id, user_name)
+        if ai:
+            player = Player(ai=True, debug=self.debug)
+            user_id = player.user_id
+        else:
+            player = Player(user_id, user_name, debug=self.debug)
+        self.players[user_id] = player
 
     def remove_player(self, user_id=None, ai=False):
-        if ai == True:
-            for old_user_id in self.players:
-                if old_user_id < 0:
-                    user_id = old_user_id
+        if ai:
+            for i in self.players:
+                if i < 0:
+                    user_id = i
         if user_id is not None:
             del self.players[user_id]
 
@@ -177,11 +143,11 @@ class SultanGame:
     def legal_actions(self):
         legal_actions = [
             GameAction.PEEK,
-            GameAction.SWITCH
         ]
 
         if self.current_player().is_hidden():
             legal_actions.append(GameAction.REVEAL)
+            legal_actions.append(GameAction.SWITCH)
         else:
             legal_actions.append(GameAction.HIDE)
             if self.current_player().character == Character.SULTAN:
@@ -190,15 +156,86 @@ class SultanGame:
                 legal_actions.append(GameAction.DETAIN)
             elif self.current_player().character == Character.ASSASSIN:
                 legal_actions.append(GameAction.ASSASSINATE)
-            # elif self.players[self.current_player].character == Character.SLAVE:
-            #     legal_actions.append(GameAction.CALL)
+            elif self.current_player().character == Character.SLAVE:
+                legal_actions.append(GameAction.CALL)
 
-        legal_actions.append(GameAction.CALL)
+        # legal_actions.append(GameAction.THRONE)
 
         return legal_actions
 
+    def can_be_peek_by(self, user_id):
+        choices = []
+        for target_id in [0] + self.player_orders:
+            target_player = self.players[target_id]
+            if target_player.can_be_peek_by(user_id):
+                choices.append(target_id)
+        return choices
 
-    def switch_character(self, player_1, player_2):
-        tmp = self.players[player_1].character
-        self.players[player_1].character = self.players[player_2].character
-        self.players[player_2].character = tmp
+    def can_be_switch_by(self, user_id, hide=True):
+        choices = []
+        for target_id in [0] + self.player_orders:
+            target_player = self.players[target_id]
+            if target_player.can_be_switch_by(user_id, hide=hide) \
+            and (target_id, user_id) != self.last_switch_pair:
+                choices.append(target_id)
+        return choices
+
+    def can_be_execute_by(self, user_id):
+        choices = []
+        for target_id in self.player_orders:
+            target_player = self.players[target_id]
+            if user_id != target_id \
+            and target_player.can_be_execute():
+                choices.append(target_id)
+        return choices
+
+    def can_be_detain_by(self, user_id):
+        choices = []
+        for target_id in self.player_orders:
+            target_player = self.players[target_id]
+            if user_id != target_id \
+            and target_player.can_be_detain():
+                choices.append(target_id)
+        return choices
+
+    def can_be_assassinate_by(self, user_id):
+        choices = []
+        for target_id in self.player_orders:
+            target_player = self.players[target_id]
+            if user_id != target_id \
+            and target_player.can_be_assassinate():
+                choices.append(target_id)
+        return choices
+
+    def do_switch(self, player_1_id, player_2_id):
+        if player_1_id != player_2_id:
+            player_1 = self.players[player_1_id]
+            player_2 = self.players[player_2_id]
+            player_1.character, player_2.character = \
+                player_2.character, player_1.character
+            self.last_switch_pair = (player_1_id, player_2_id)
+
+    def do_kill(self, user_id):
+        if user_id not in self.player_orders:
+            raise
+        cur_player = self.current_player()
+        
+        self.players[user_id].alive = False
+        self.players[user_id].jail = False
+        self.player_orders.remove(user_id)
+
+        for i, user_id in enumerate(self.player_orders):
+            self.players[user_id].order = i
+        self.current_player_index = cur_player.order
+
+    def do_prison(self, user_id):
+        if user_id not in self.player_orders:
+            raise       
+        self.players[user_id].jail = True
+
+    def do_hide(self, user_id):
+        self.players[user_id].hidden = True
+        if self.players[user_id].is_sultan():
+            for _, player in self.players.items():
+                player.throne_countdown = None
+

@@ -5,7 +5,7 @@ class Character(Enum):
     GUARD = 2
     ASSASSIN = 3
     SLAVE = 4
-    DRIVER = 5
+    SLAVEDRIVER = 5
     DANCER = 6
     VIZIER = 7
     PROPHET = 8
