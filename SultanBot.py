@@ -37,17 +37,6 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-"""
-{'id': 225404196, 'type': 'private', 'username': 'Alyricing', 'first_name': '音', 'last_name': '抒情'}
-{'id': 1483514012, 'type': 'private', 'username': 'gym7012', 'first_name': '鑫'}
-1483514012 1483514012 鑫
-{'id': 1496518066, 'type': 'private', 'username': 'justajunk', 'first_name': 'Island', 'last_name': 'Man'}
-1496518066 1496518066 Island Man
-225404196 225404196 音 抒情
-{'id': 1032245229, 'type': 'private', 'username': 'DanchifromTW', 'first_name': 'PPer in TW'}
-
-
-"""
 from Sultan.Manager import SultanManager
 from Sultan.State import State as GameState
 from Sultan.Action import GameAction

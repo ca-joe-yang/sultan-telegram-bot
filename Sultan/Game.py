@@ -48,17 +48,9 @@ class SultanGame:
                 tmp.append(character)
 
         np.random.shuffle(tmp)
-        admin_character = None #Character.SULTAN
 
-        if admin_character is not None:
-            self.players[1422967494].character = admin_character
-            tmp.remove(admin_character)
-
-        i = 0
-        for _, (user_id, player) in enumerate(self.players.items()):
-            if user_id != 1422967494 or admin_character is None:
-                player.character = tmp[i]
-                i += 1
+        for i, (user_id, player) in enumerate(self.players.items()):
+            player.character = tmp[i]
 
         self.turn_id = 0
         self.current_player_index = 0
