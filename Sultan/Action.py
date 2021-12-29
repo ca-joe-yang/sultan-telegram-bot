@@ -9,9 +9,8 @@ ACTION_CONFIG = {
     4: '<一般> 取消',
     
     11: '<一般> 公開',
-    12: '<一般> 隱藏',
-    13: '<一般> 偷看',
-    14: '<一般> 交換',
+    12: '<一般> 偷看',
+    13: '<一般> 交換',
 
     21: '<蘇丹> 處決',
     22: '<蘇丹> 登基',
@@ -38,9 +37,8 @@ class GameAction(Enum):
     
     """Regular action"""
     REVEAL = 11
-    HIDE = 12
-    PEEK = 13
-    SWITCH = 14
+    PEEK = 12
+    SWITCH = 13
 
     """Sultan action"""
     EXECUTE = 21

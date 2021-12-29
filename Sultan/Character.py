@@ -52,4 +52,10 @@ CHARACTER_COUNT_DICTIONARY = {
         Character.ASSASSIN: 1,
         Character.SLAVE: 3,
     },
+    10: {
+        Character.SULTAN: 1,
+        Character.GUARD: 2,
+        Character.ASSASSIN: 2,
+        Character.SLAVE: 6,
+    },
 }

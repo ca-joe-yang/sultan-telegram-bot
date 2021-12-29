@@ -58,6 +58,16 @@ class Player:
 
         return user_name
 
+    def is_winner(self, win):
+        if self.is_spare():
+            return False
+        if win == 'loyal':
+            return self.is_loyal()
+        elif win == 'rebel':
+            return self.is_rebel()
+        else:
+            raise
+
     def is_ai(self):
         return self.user_id < 0
 
@@ -186,7 +196,7 @@ class Player:
                 else:
                     return Action.SWITCH, self.ai_switch(game, hide=False)
             else:
-                return Action.HIDE, self.ai_switch(game, hide=True)
+                return Action.SWITCH, self.ai_switch(game, hide=True)
 
     def ai_peek(self, game):
         choices = game.can_be_peek_by(self.user_id)

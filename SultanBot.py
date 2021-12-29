@@ -106,10 +106,7 @@ class SultanBot:
                 manager.do_peek(query)
         elif message_id == manager.msg_history.setdefault('switch_button', None):
             if manager.game_state == GameState.TURN_MID:
-                manager.do_switch(query, hide=False)
-        elif message_id == manager.msg_history.setdefault('hide_button', None):
-            if manager.game_state == GameState.TURN_MID:
-                manager.do_switch(query, hide=True)
+                manager.do_switch(query)
         elif message_id == manager.msg_history.setdefault('execute_button', None):
             if manager.game_state == GameState.TURN_MID:
                 manager.do_execute(query)
@@ -143,7 +140,7 @@ def main():
     # Make sure to set use_context=True to use the new context based callbacks
     # Post version 12 this will no longer be necessary
     with open('XTalkSultanBot.token', 'r') as f:
-        updater = Updater(f.read(), use_context=True)
+        updater = Updater(f.read().strip(), use_context=True)
 
     # Get the dispatcher to register handlers
     dispatcher = updater.dispatcher

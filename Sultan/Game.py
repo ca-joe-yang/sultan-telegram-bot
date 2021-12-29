@@ -36,6 +36,8 @@ class SultanGame:
         self.player_orders = [ user_id for user_id in self.players if user_id != 0 ]
         np.random.shuffle(self.player_orders)
 
+        self.original_player_orders = self.player_orders.copy() + [0]
+
         for i, user_id in enumerate(self.player_orders):
             self.players[user_id].order = i
         
@@ -58,6 +60,7 @@ class SultanGame:
                 player.character = tmp[i]
                 i += 1
 
+        self.turn_id = 0
         self.current_player_index = 0
 
     def check_win_condition(self, only_revolution=False):
@@ -91,21 +94,28 @@ class SultanGame:
         return False
 
     def next_player(self):
+        self.turn_id += 1
         self.current_player_index = (self.current_player_index + 1) % len(self.player_orders)
 
     def current_player(self):
         user_id = self.player_orders[self.current_player_index]
         return self.players[user_id]
 
-    def get_player_information(self, user_id):
+    def get_player_information(self, user_id, game_over=False):
         ret = []
-        for target_id in self.player_orders:
-            ret.append(
-                f'{self.players[target_id].status(verbose=user_id == target_id)}')
-        for target_id in self.players:
-            if target_id not in self.player_orders and target_id != 0:
+        if game_over:
+            for target_id in self.original_player_orders:
+                ret.append(
+                    f'{self.players[target_id].status(verbose=True)}')
+
+        else:
+            for target_id in self.player_orders:
                 ret.append(
                     f'{self.players[target_id].status(verbose=user_id == target_id)}')
+            for target_id in self.players:
+                if target_id not in self.player_orders and target_id != 0:
+                    ret.append(
+                        f'{self.players[target_id].status(verbose=user_id == target_id)}')
         return ret
 
     def get_neighbors(self, user_id):
@@ -143,13 +153,12 @@ class SultanGame:
     def legal_actions(self):
         legal_actions = [
             GameAction.PEEK,
+            GameAction.SWITCH
         ]
 
         if self.current_player().is_hidden():
             legal_actions.append(GameAction.REVEAL)
-            legal_actions.append(GameAction.SWITCH)
         else:
-            legal_actions.append(GameAction.HIDE)
             if self.current_player().character == Character.SULTAN:
                 legal_actions.append(GameAction.EXECUTE)
             elif self.current_player().character == Character.GUARD:
@@ -218,15 +227,17 @@ class SultanGame:
     def do_kill(self, user_id):
         if user_id not in self.player_orders:
             raise
-        cur_player = self.current_player()
+        cur_id = self.current_player().user_id
         
         self.players[user_id].alive = False
         self.players[user_id].jail = False
-        self.player_orders.remove(user_id)
 
-        for i, user_id in enumerate(self.player_orders):
-            self.players[user_id].order = i
-        self.current_player_index = cur_player.order
+        self.player_orders = [ p \
+            for p in self.player_orders if p != user_id]
+
+        for i, target_id in enumerate(self.player_orders):
+            self.players[target_id].order = i
+        self.current_player_index = self.players[cur_id].order
 
     def do_prison(self, user_id):
         if user_id not in self.player_orders:
