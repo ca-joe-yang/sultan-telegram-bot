@@ -23,8 +23,8 @@ import numpy as np
 import json
 import logging
 import copy
-import imageio
 import util
+import os
 
 import telegram as tg
 from telegram import Update
@@ -71,6 +71,14 @@ class SultanBot:
         chat_id, user_id, _, _ = util.message_info(update.message)
         self.bot.send_message(user_id, self.tutorial_str)
 
+    def command_visual(self, update: Update, context: CallbackContext) -> None:
+        chat_id, user_id, _, _ = util.message_info(update.message)
+        if chat_id not in self.managers:
+            return
+        manager = self.managers[chat_id]
+        manager.draw_game_image()
+        manager.send_visual('visual')
+
     def button_handlers(self, update: Update, context: CallbackContext) -> None:
         query = update.callback_query
         chat_id, _, _, message_id = util.message_info(query.message)
@@ -114,6 +122,12 @@ class SultanBot:
         elif message_id == manager.msg_history.setdefault('join_button', None):
             if manager.game_state == GameState.JOIN_REVOLUTION:
                 manager.do_join(query)
+        elif message_id == manager.msg_history.setdefault('capture_button', None):
+            if manager.game_state == GameState.TURN_MID:
+                manager.do_capture(query)
+        elif message_id == manager.msg_history.setdefault('hunt_button', None):
+            if manager.game_state == GameState.TURN_MID:
+                manager.do_hunt(query)
 
     """ Admin function """
     def command_gamestate(self, update: Update, context: CallbackContext) -> None:
@@ -128,8 +142,11 @@ def main():
     # Create the Updater and pass it your bot's token.
     # Make sure to set use_context=True to use the new context based callbacks
     # Post version 12 this will no longer be necessary
-    with open('XTalkSultanBot.token', 'r') as f:
+    with open('test_bot.token', 'r') as f:
         updater = Updater(f.read().strip(), use_context=True)
+
+    os.makedirs('user_pics', exist_ok=True)
+    os.makedirs('game_pics', exist_ok=True)
 
     # Get the dispatcher to register handlers
     dispatcher = updater.dispatcher
@@ -138,6 +155,7 @@ def main():
     dispatcher.add_handler(CommandHandler("newgame", game_bot.command_newgame))
     dispatcher.add_handler(CommandHandler("general", game_bot.command_general))
     dispatcher.add_handler(CommandHandler("tutorial", game_bot.command_tutorial))
+    dispatcher.add_handler(CommandHandler("visual", game_bot.command_visual))
 
     dispatcher.add_handler(CommandHandler("gamestate", game_bot.command_gamestate))
 

@@ -2,28 +2,33 @@ from .Character import Character
 from .Action import GameAction as Action
 import random
 
+from PIL import Image
+
 AI_COUNT = 0
 
 class Player:
 
-    def __init__(self, user_id=None, user_name=None, spare=False, ai=False, debug=False):
+    def __init__(self, user_id=None, user_name=None, profile_photo=None,
+        spare=False, ai=False, debug=False):
 
         if ai:
             global AI_COUNT
             AI_COUNT += 1
             self.user_id = -AI_COUNT
             self.user_name = f'電腦{AI_COUNT}'
+            self.ai = True
         else:
             self.user_id = user_id
             self.user_name = ''.join(user_name.split())
+            self.ai = False
         
-        self.player_id = None
         self.throne_countdown = None
 
         self.hidden = True
         self.alive = True
         self.character = None
         self.jail = False
+        self.captured = False
         self.order = None
 
         self.next_action = None
@@ -34,18 +39,31 @@ class Player:
 
         self.debug = debug
 
+        self.capture_slaves = []
+        self.captured_by = None
+
+        self.image_H = 100
+        self.image_W = 100
+        if profile_photo is None:
+            self.profile_photo = Image.new("RGB", 
+                (self.image_W, self.image_H), (127, 127, 127))
+        else:
+            self.profile_photo = profile_photo
+        self.profile_photo = self.profile_photo.resize(
+            [self.image_W, self.image_H])
+
     def status(self, verbose=False):
         status_str = ''
 
         if self.is_dead():
             status_str += '[歿]'
-        elif self.is_jail():
+        elif self.is_jail() or self.is_captured():
             status_str += '[牢]'
         
         if self.is_hidden():
-            status_str += '[隱]'
+            status_str += '[私]'
         elif self.is_not_hidden():
-            status_str += '[顯]'
+            status_str += '[公]'
 
         if self.is_not_hidden() or verbose:
             status_str += f'<{self.character}>'
@@ -58,18 +76,45 @@ class Player:
 
         return user_name
 
+    def action_choices(self):
+        actions = [
+            Action.PEEK,
+            Action.SWITCH
+        ]
+
+        if self.is_hidden():
+            actions.append(Action.REVEAL)
+        else:
+            if self.character == Character.SULTAN:
+                actions.append(Action.EXECUTE)
+            elif self.character == Character.GUARD:
+                actions.append(Action.DETAIN)
+            elif self.character == Character.ASSASSIN:
+                actions.append(Action.ASSASSINATE)
+            elif self.character == Character.SLAVE:
+                actions.append(Action.CALL)
+            elif self.character == Character.SLAVEDRIVER:
+                actions.append(Action.CAPTURE)
+                actions.append(Action.HUNT)
+
+        return actions
+
     def is_winner(self, win):
         if self.is_spare():
             return False
         if win == 'loyal':
+            if self.character == Character.SLAVEDRIVER:
+                return self.is_not_hidden()
             return self.is_loyal()
         elif win == 'rebel':
+            if self.character == Character.SLAVEDRIVER:
+                return self.is_hidden()
             return self.is_rebel()
         else:
             raise
 
     def is_ai(self):
-        return self.user_id < 0
+        return self.ai
 
     def is_alive(self):
         return self.alive
@@ -86,26 +131,32 @@ class Player:
     def is_not_spare(self):
         return not self.spare
 
-    def is_not_jail(self):
-        return not self.jail
-
     def is_free(self):
-        return not self.jail
+        return not self.is_jail() and not self.is_captured()
+
+    def is_not_free(self):
+        return not self.is_free()
 
     def is_jail(self):
         return self.jail
+
+    def is_captured(self):
+        return self.captured_by is not None
 
     def is_dead(self):
         return not self.alive
 
     def is_rebel(self):
-        return self.character == Character.ASSASSIN or self.character == Character.SLAVE
+        return self.character in [Character.ASSASSIN, Character.SLAVE]
 
     def is_loyal(self):
-        return self.character == Character.SULTAN or self.character == Character.GUARD
+        return self.character in [Character.SULTAN, Character.GUARD]
 
     def is_sultan(self):
         return self.character == Character.SULTAN
+
+    def is_slave(self):
+        return self.character == Character.SLAVE
 
     def is_free_slave(self):
         return self.character == Character.SLAVE \
@@ -129,6 +180,12 @@ class Player:
     def can_be_detain(self):
         return self.user_id != 0 and self.is_alive() and self.is_free()
 
+    def can_be_capture(self):
+        return self.character == Character.SLAVE and self.is_not_hidden() and self.is_alive() and self.is_free()
+
+    def can_be_hunt(self):
+        return self.is_not_spare() and self.is_hidden() and self.is_alive() and self.is_free()
+
     def can_be_assassinate(self):
         return self.user_id != 0 and self.is_alive()
 
@@ -151,52 +208,70 @@ class Player:
     """
     def ai_action(self, game):
         if self.next_action is not None:
-            action, target_id = self.next_action
+            action, target_ids = self.next_action
             self.next_action = None
-            return action, target_id
+            return action, target_ids
         
         if self.character == Character.SULTAN:
             callback, target_id = self.ai_execute(game)
             if callback:
                 if self.is_hidden():
-                    self.next_action = Action.EXECUTE, target_id
-                    return Action.REVEAL, None
-                return Action.EXECUTE, target_id
+                    self.next_action = Action.EXECUTE, [target_id]
+                    return Action.REVEAL, [None]
+                return Action.EXECUTE, [target_id]
         
         elif self.character == Character.GUARD:
             callback, target_id = self.ai_detain(game)
             if callback:
                 if self.is_hidden():
-                    self.next_action = Action.DETAIN, target_id
-                    return Action.REVEAL, None
-                return Action.DETAIN, target_id
+                    self.next_action = Action.DETAIN, [target_id]
+                    return Action.REVEAL, [None]
+                return Action.DETAIN, [target_id]
         
         elif self.character == Character.ASSASSIN and self.is_not_hidden():
             callback, target_id = self.ai_assassinate(game)
             if callback:
                 if self.is_hidden():
-                    self.next_action = Action.ASSASSINATE, target_id
-                    return Action.REVEAL, None
-                return Action.ASSASSINATE, target_id
+                    self.next_action = Action.ASSASSINATE, [target_id]
+                    return Action.REVEAL, [None]
+                return Action.ASSASSINATE, [target_id]
         
         elif self.character == Character.SLAVE and self.is_not_hidden():
             callback, target_id = self.ai_call(game)
             if callback:
                 if self.is_hidden():
-                    self.next_action = Action.CALL, target_id
-                    return Action.REVEAL, None
-                return Action.CALL, target_id
+                    self.next_action = Action.CALL, [target_id]
+                    return Action.REVEAL, [None]
+                return Action.CALL, [target_id]
+
+        elif self.character == Character.SLAVEDRIVER and self.is_not_hidden():
+            callback, target_id = self.ai_capture(game)
+            if callback:
+                if self.is_hidden():
+                    self.next_action = Action.CALL, [target_id]
+                    return Action.REVEAL, [None]
+                return Action.CAPTURE, [target_id]
+
+            callback, target_id = self.ai_hunt(game)
+            if callback:
+                if self.is_hidden():
+                    self.next_action = Action.CALL, [target_id]
+                    return Action.REVEAL, [None]
+                return Action.HUNT, [target_id]
         
-        if random.random() > 0.5:
-            return Action.PEEK, self.ai_peek(game)
+        if random.random() > 0.8:
+            target_id = self.ai_peek(game)
+            return Action.PEEK, [target_id]
         else:
             if self.is_hidden():
-                if random.random() > 0.5:
-                    return Action.REVEAL, None
+                if random.random() > 0.3:
+                    return Action.REVEAL, [None]
                 else:
-                    return Action.SWITCH, self.ai_switch(game, hide=False)
+                    target_id = self.ai_switch(game, hide=False)
+                    return Action.SWITCH, [target_id]
             else:
-                return Action.SWITCH, self.ai_switch(game, hide=True)
+                target_id = self.ai_switch(game, hide=True)
+                return Action.SWITCH, [target_id]
 
     def ai_peek(self, game):
         choices = game.can_be_peek_by(self.user_id)
@@ -241,6 +316,36 @@ class Player:
         ### DEBUG MODE
         if self.debug:
             print('Detain choices: ' + \
+                ', '.join([game.players[i].status() for i in choices]))
+        ###
+        if len(choices):
+            return True, choices[random.randint(0, len(choices)-1)]
+        else:
+            return False, None
+
+    def ai_capture(self, game):
+        choices = []
+        for target_id, target_player in game.players.items():
+            if target_player.can_be_capture():
+                choices.append(target_id)
+        ### DEBUG MODE
+        if self.debug:
+            print('Capture choices: ' + \
+                ', '.join([game.players[i].status() for i in choices]))
+        ###
+        if len(choices):
+            return True, choices[random.randint(0, len(choices)-1)]
+        else:
+            return False, None
+
+    def ai_hunt(self, game):
+        choices = []
+        for target_id, target_player in game.players.items():
+            if target_player.can_be_hunt():
+                choices.append(target_id)
+        ### DEBUG MODE
+        if self.debug:
+            print('Hunt choices: ' + \
                 ', '.join([game.players[i].status() for i in choices]))
         ###
         if len(choices):

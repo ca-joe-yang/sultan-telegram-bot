@@ -32,30 +32,78 @@ class Character(Enum):
         else:
             raise
 
+NEUTRAL_CHARACTERS = [
+    Character.SLAVEDRIVER,
+    # Character.DANCER,
+    # Character.VIZIER,
+    # Character.PROPHET
+]
+
 CHARACTER_COUNT_DICTIONARY = {
-    2: {
-        Character.SULTAN: 1,
-        Character.SLAVE: 2,
-    },
-    3: {
-        Character.SULTAN: 1,
-        Character.SLAVE: 3,
-    },
-    4: {
-        Character.SULTAN: 1,
-        Character.GUARD: 1,
-        Character.SLAVE: 3,
-    },
     5: {
         Character.SULTAN: 1,
         Character.GUARD: 1,
         Character.ASSASSIN: 1,
         Character.SLAVE: 3,
     },
+    6: {
+        Character.SULTAN: 1,
+        Character.GUARD: 1,
+        Character.ASSASSIN: 1,
+        Character.SLAVE: 3,
+    },
+    7: {
+        Character.SULTAN: 1,
+        Character.GUARD: 1,
+        Character.ASSASSIN: 1,
+        Character.SLAVE: 3,
+    },
+    8: {
+        Character.SULTAN: 1,
+        Character.GUARD: 2,
+        Character.ASSASSIN: 2,
+        Character.SLAVE: 3,
+    },
+    9: {
+        Character.SULTAN: 1,
+        Character.GUARD: 2,
+        Character.ASSASSIN: 2,
+        Character.SLAVE: 3,
+    },
     10: {
         Character.SULTAN: 1,
         Character.GUARD: 2,
         Character.ASSASSIN: 2,
-        Character.SLAVE: 6,
+        Character.SLAVE: 3,
+    },
+    11: {
+        Character.SULTAN: 1,
+        Character.GUARD: 2,
+        Character.ASSASSIN: 2,
+        Character.SLAVE: 4,
+    },
+    12: {
+        Character.SULTAN: 1,
+        Character.GUARD: 3,
+        Character.ASSASSIN: 3,
+        Character.SLAVE: 4,
+    },
+    13: {
+        Character.SULTAN: 1,
+        Character.GUARD: 3,
+        Character.ASSASSIN: 3,
+        Character.SLAVE: 4,
+    },
+    14: {
+        Character.SULTAN: 1,
+        Character.GUARD: 3,
+        Character.ASSASSIN: 3,
+        Character.SLAVE: 4,
+    },
+    15: {
+        Character.SULTAN: 1,
+        Character.GUARD: 3,
+        Character.ASSASSIN: 3,
+        Character.SLAVE: 5,
     },
 }

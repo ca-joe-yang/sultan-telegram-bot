@@ -5,6 +5,9 @@ from .Game import SultanGame
 import numpy as np
 import telegram as tg
 import time
+import os
+
+from PIL import Image
 
 GAME_COUNT = 0
 
@@ -30,6 +33,7 @@ class SultanManager:
 
     def new_game(self, user_id, user_name=None, debug=True):
         self.game = SultanGame(debug=debug)
+        self.game_image_fname = f'game_pics/{self.chat_id}.jpg'
 
         self.game_state = GameState.IDLE
         self.admin_id = user_id
@@ -83,8 +87,12 @@ class SultanManager:
             if self.debug:
                 print(f'Start')
             ###
-            self.start_game()
-            return
+            if 5 <= len(self.game.players) <= 15:
+                self.start_game()
+                return
+            else:
+                message = '[通知] 玩家人數必須介於 5 到 15 人'
+                self.send_pop_up(message, query)
         
         elif data == 'join':
             ### DEBUG MODE
@@ -94,7 +102,16 @@ class SultanManager:
             if user_id in self.game.players:
                 message = f'[通知] 你已經加入遊戲了'
             else:
-                self.game.add_player(user_id, user_name)
+                user_photo_fname = f'user_pics/{user_id}.jpg'
+                if not os.path.isfile(user_photo_fname):
+                    photo_id = self.bot.get_user_profile_photos(user_id).photos[0][-1].file_id
+                    # print(profile_photo)
+                    # profile_photo = profile_photo[0][0].get_file()
+                    file = self.bot.get_file(photo_id)
+                    file.download(user_photo_fname)
+                profile_photo = Image.open(user_photo_fname)
+                self.game.add_player(user_id, user_name, 
+                    profile_photo)
                 message = f'[通知] 成功加入遊戲'
             self.send_pop_up(message, query)
         elif data == 'exit':
@@ -113,7 +130,7 @@ class SultanManager:
             if self.debug:
                 print(f'Add ai')
             ###
-            while len(self.game.players) < 5:
+            while len(self.game.players) < 6:
                 # print(self.game.players)
                 self.game.add_player(ai=True)
         elif data == 'remove_ai' and self.is_admin(user_id):
@@ -197,18 +214,30 @@ class SultanManager:
                 print(self.msg_history)
             del self.msg_history[name]
 
+    def send_visual(self, name=None):
+        p = open(self.game_image_fname, 'rb')
+        if name is not None and name in self.msg_history:
+            self.delete_message(name)
+        message = self.bot.send_photo(self.chat_id, p)
+        if name is not None:
+            self.msg_history[name] = message.message_id
+
+    def draw_game_image(self):
+        self.game.draw_game_image()
+        self.game.game_image.save(self.game_image_fname)
+
     def start_game(self):
         ### DEBUG MODE
         if self.debug:
             print(f'Start game')
         ###
         self.delete_message('register_button')
-        self.send_announce(f'[公告] 遊戲開始 請大家查看自己的身份', name='start')
+        self.send_announce(f'[開始] 遊戲開始 請大家查看自己的身份', name='start')
         self.game.start_game()
         player_order_str = ', '.join([ 
             f'({self.game.players[p].order+1}) {self.game.players[p].user_name}'\
             for p in self.game.player_orders ])
-        self.send_announce(f'玩家順序為 {player_order_str}', name='start')
+        self.send_announce(f'[開始] 玩家順序為 {player_order_str}', name='start')
         self.ask_general(first=True)
 
     def end_game(self):
@@ -258,16 +287,15 @@ class SultanManager:
             self.end_game()
             return
 
-        if cur_player.is_jail():
+        if cur_player.is_not_free():
             self.send_announce(
                 f'[公告] {cur_player.user_name} 出獄',
                 name='turn'
             )
+            cur_player.captured = False
             cur_player.jail = False
             self.end_turn()
             return
-        # user_id = game.current_player().user_id
-        # user_name = game.players[user_id].user_name
         self.ask_action()
 
     def end_turn(self):
@@ -297,6 +325,9 @@ class SultanManager:
             self.game_state = GameState.CHECK
             self.checked_players = [ p \
             for p in self.game.player_orders if self.game.players[p].is_ai() ]
+            if len(self.checked_players) == len(self.game.player_orders):
+                self.start_turn()
+                return
 
         self.send_buttons(
             message='[通用按鈕]',
@@ -331,6 +362,8 @@ class SultanManager:
             and user_id not in self.checked_players:
                 self.checked_players.append(user_id)
                 if len(self.checked_players) == len(self.game.player_orders):
+                    self.draw_game_image()
+                    self.send_visual('visual')
                     self.start_turn()
 
         elif action == GameAction.TUTORIAL:
@@ -353,10 +386,13 @@ class SultanManager:
         cur_player = self.game.current_player()
 
         if cur_player.is_ai():
-            action, target_id = cur_player.ai_action(self.game)
-            self.do_action(action=action, target_id=target_id)
+            action, target_ids = cur_player.ai_action(self.game)
+            self.do_action(
+                action=action,
+                from_id=cur_player.user_id,
+                target_ids=target_ids)
         else:
-            action_choices = self.game.legal_actions()
+            action_choices = cur_player.action_choices()
 
             keyboard = self.generate_keyboard_action(
                 action_choices, max_len=2)
@@ -366,7 +402,7 @@ class SultanManager:
                 name='action_button'
             )
 
-    def do_action(self, query=None, action=None, target_id=None):
+    def do_action(self, query=None, action=None, from_id=None, target_ids=[None]):
         ### DEBUG MODE
         if self.debug:
             print(f'Do action')
@@ -374,39 +410,53 @@ class SultanManager:
         cur_player = self.game.current_player()
         
         if query is not None:
-            if query.from_user.id != cur_player.user_id:
-                return
-            else:
-                action = GameAction(int(query.data))
-                ### DEBUG MODE
-                if self.debug:
-                    print(f'{query.data} {action}')
-                ###
+            action = GameAction(int(query.data))
+            from_id = query.from_user.id
+            if from_id != cur_player.user_id \
+            or (action == GameAction.THRONE \
+            and self.game.players[from_id].is_sultan()):
+                return                
+            ### DEBUG MODE
+            if self.debug:
+                print(f'{query.data} {action}')
+            ###
 
         self.game_state = GameState.TURN_MID
         self.delete_message('action_button')
 
         if action == GameAction.REVEAL:
-            self.do_reveal(cur_player.user_id)
+            self.do_reveal(from_id)
             self.ask_action()
 
         elif action == GameAction.PEEK:
-            self.ask_peek(target_id=target_id)
+            self.ask_peek(target_id=target_ids[0])
         
         elif action == GameAction.SWITCH:
-            self.ask_switch(target_id=target_id)
+            self.ask_switch(target_id=target_ids[0])
         
         elif action == GameAction.EXECUTE:
-            self.ask_execute(target_id=target_id)
+            self.ask_execute(target_id=target_ids[0])
 
         elif action == GameAction.DETAIN:
-            self.ask_detain(target_id=target_id)
+            self.ask_detain(target_id=target_ids[0])
 
         elif action == GameAction.ASSASSINATE:
-            self.ask_assassinate(target_id=target_id)
+            self.ask_assassinate(target_id=target_ids[0])
 
         elif action == GameAction.CALL:
             self.ask_join()
+
+        elif action == GameAction.THRONE:
+            if query is not None \
+            and self.game.players[from_id].is_sultan():
+                self.do_reveal(from_id)
+                self.ask_action()
+
+        elif action == GameAction.CAPTURE:
+            self.ask_capture(target_id=target_ids[0])
+
+        elif action == GameAction.HUNT:
+            self.ask_hunt(target_id=target_ids[0])
 
     def do_reveal(self, player_id):
         ### DEBUG MODE
@@ -689,7 +739,7 @@ class SultanManager:
                 self.send_pop_up(f'[通知] 你不是保皇派 不能避免關押', query=query)
         else:
             self.delete_message('avoid_detain_button')
-            self.game.do_prison(suspect.user_id)
+            self.game.do_jail(suspect.user_id)
             self.send_announce(
                 f'[動作] {guard.user_name} 關押了 {suspect.user_name}',
                 name='turn')
@@ -911,24 +961,123 @@ class SultanManager:
                     name='turn')
                 self.end_turn()
 
+    def ask_capture(self, target_id=None):
+        ### DEBUG MODE
+        if self.debug:
+            print(f'Ask capture')
+        ###
+        cur_player = self.game.current_player()
+
+        if cur_player.is_ai():
+            self.do_capture(
+                player_1_id=cur_player.user_id, 
+                player_2_id=target_id)
+        else:
+            choices = self.game.can_be_capture_by(cur_player.user_id)
+            keyboard = self.generate_keyboard_player(choices, cancel=True)
+
+            message = f"[詢問] {cur_player.user_name} 你想要抓捕誰？"
+            name = 'capture_button'
+            
+            self.send_buttons(
+                message,
+                markup=tg.InlineKeyboardMarkup(keyboard),
+                name=name
+            )
+
+    def do_capture(self, query=None, player_1_id=None, player_2_id=None):
+        ### DEBUG MODE
+        if self.debug:
+            print(f'Do capture')
+        ###
+        if query is not None:
+            self.delete_message('capture_button')
+            if GameAction(int(query.data)) == GameAction.CANCEL:
+                self.ask_action()
+                return
+            else:
+                player_2_id = int(query.data)
+            player_1_id = query.from_user.id
+
+        player_1 = self.game.players[player_1_id]
+        player_2 = self.game.players[player_2_id]
+
+        self.game.do_capture(player_1_id, player_2_id)
+        message = f'[動作] {player_1.user_name} 抓捕了 {player_2.user_name}'
+        self.send_announce(message, name='turn')
+        self.end_turn()
+
+    def ask_hunt(self, target_id=None):
+        ### DEBUG MODE
+        if self.debug:
+            print(f'Ask capture')
+        ###
+        cur_player = self.game.current_player()
+
+        if cur_player.is_ai():
+            self.do_hunt(
+                player_1_id=cur_player.user_id, 
+                player_2_id=target_id)
+        else:
+            choices = self.game.can_be_hunt_by(cur_player.user_id)
+            keyboard = self.generate_keyboard_player(choices, cancel=True)
+
+            message = f"[詢問] {cur_player.user_name} 你想要狩獵誰？"
+            name = 'hunt_button'
+            
+            self.send_buttons(
+                message,
+                markup=tg.InlineKeyboardMarkup(keyboard),
+                name=name)
+
+    def do_hunt(self, query=None, player_1_id=None, player_2_id=None):
+        ### DEBUG MODE
+        if self.debug:
+            print(f'Do hunt')
+        ###
+        if query is not None:
+            self.delete_message('hunt_button')
+            if GameAction(int(query.data)) == GameAction.CANCEL:
+                self.ask_action()
+                return
+            else:
+                player_2_id = int(query.data)
+            player_1_id = query.from_user.id
+
+        player_1 = self.game.players[player_1_id]
+        player_2 = self.game.players[player_2_id]
+
+        if player_2.is_slave():
+            self.game.do_capture(player_1_id, player_2_id)
+            message = f'[動作] {player_1.user_name} 成功狩獵了 {player_2.user_name}，獲得額外回合'
+            self.send_announce(message, name='turn')
+            self.do_reveal(player_2_id)
+            self.ask_action()
+        else:
+            message = f'[動作] {player_1.user_name} 狩獵失敗，{player_2.user_name} 不是奴隸'
+            self.send_announce(message, name='turn')
+            self.end_turn()
+
+
     def is_admin(self, user_id):
         return user_id == self.admin_id
 
     """Utility functions
     """
     def generate_keyboard_player(self, player_choices, max_len=2, cancel=True):
-        keyboard = [[]]
+        keyboard = [[], []]
         i = 0
-        if cancel:
-            keyboard[i].append(tg.InlineKeyboardButton(
-                callback_data=GameAction.CANCEL.value, text=str(GameAction.CANCEL)))
         for target_id in player_choices:
-            if len(keyboard[i]) >= max_len:
-                keyboard.append([])
-                i += 1
             keyboard[i].append(tg.InlineKeyboardButton(
                 callback_data=target_id, 
                 text=str(self.game.players[target_id].status())))
+            if len(keyboard[i]) >= max_len:
+                keyboard.append([])
+                i += 1
+        if cancel:
+            keyboard.append([])
+            keyboard[i].append(tg.InlineKeyboardButton(
+                callback_data=GameAction.CANCEL.value, text=str(GameAction.CANCEL)))
         return keyboard
 
     def generate_keyboard_action(self, action_choices, max_len=2):
