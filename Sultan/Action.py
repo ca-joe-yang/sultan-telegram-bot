@@ -7,10 +7,12 @@ ACTION_CONFIG = {
     2: '<通用> 查看',
     3: '<通用> 教學',
     4: '<選項> 取消',
+    5: '<管理> 重新',
     
     11: '<一般> 偷看',
     12: '<一般> 交換',
     13: '<身份> 公開',
+    14: '<選項> 放棄',
 
     21: '<蘇丹> 處決',
     22: '<蘇丹> 登基',
@@ -28,7 +30,7 @@ ACTION_CONFIG = {
 
     81: '<大官> 操弄',
 
-    91: '<先知> 預測',
+    91: '<先知> 預言',
 }
 
 class GameAction(Enum):
@@ -40,6 +42,7 @@ class GameAction(Enum):
     CHECK = 2
     TUTORIAL = 3
     CANCEL = 4
+    RESTART = 5
     
     """Regular action"""
     PEEK = 11

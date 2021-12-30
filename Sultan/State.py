@@ -15,6 +15,9 @@ class State(Enum):
     STOP_ASSASSINATE = 22
     JOIN_REVOLUTION = 23
 
+    def in_turn(self):
+        return self.value >= 10
+
     def __str__(self):
         if self.value == 1:
             return '閒置'

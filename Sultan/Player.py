@@ -2,14 +2,15 @@ from .Character import Character
 from .Action import GameAction as Action
 import random
 
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
+from .draw_utils import *
 
 AI_COUNT = 0
 
 class Player:
 
     def __init__(self, user_id=None, user_name=None, profile_photo=None,
-        spare=False, ai=False, debug=False):
+        spare=False, ai=False, debug=False, h=100, w=100):
 
         if ai:
             global AI_COUNT
@@ -23,6 +24,8 @@ class Player:
             self.ai = False
         
         self.throne_countdown = None
+
+        self.must_switch = False
 
         self.hidden = True
         self.alive = True
@@ -43,8 +46,8 @@ class Player:
         self.capture_slaves = []
         self.captured_by = None
 
-        self.image_H = 100
-        self.image_W = 100
+        self.image_H = h
+        self.image_W = w
         if profile_photo is None:
             self.profile_photo = Image.new("RGB", 
                 (self.image_W, self.image_H), (127, 127, 127))
@@ -80,7 +83,39 @@ class Player:
 
         return user_name
 
+    def draw_player_image(self, fontsize=10, game_over=False, win=False):
+        canvas = self.profile_photo.copy()
+        player_draw = ImageDraw.Draw(canvas)
+        font = ImageFont.truetype('TaipeiSansTCBeta-Bold.ttf', fontsize)
+
+        if self.is_dead():
+            draw_cross(player_draw, 
+                x=0, y=0, w=self.image_W, h=self.image_H)
+                
+        elif self.is_captured() or self.is_jail():
+            draw_prison(player_draw, 
+                x=0, y=0, w=self.image_W, h=self.image_H)
+
+        if self.is_known():
+            player_draw.text((0, 0), self.character.abbr(), 
+                font=font, 
+                stroke_width=int(fontsize/20), stroke_fill=(0,0,0))
+        elif game_over:
+            player_draw.text((0, 0), self.character.abbr(), 
+                font=font, fill='black',
+                stroke_width=int(fontsize/20), stroke_fill=(255,255,255))
+
+        if game_over and win:
+            draw_border(player_draw, 
+                x=0, y=0, w=self.image_W, h=self.image_H,
+                fill='green', width=10)
+
+        return canvas
+
     def action_choices(self, just_reveal=False, manipulate=False):
+        if self.must_switch:
+            return [Action.SWITCH]
+
         actions = []
         if not just_reveal and not manipulate:
             actions.append(Action.PEEK)
@@ -88,7 +123,7 @@ class Player:
 
         if self.is_hidden():
             actions.append(Action.REVEAL)
-        elif not self.is_exhaust():
+        elif manipulate or not self.is_exhaust():
             if self.character == Character.SULTAN:
                 actions.append(Action.EXECUTE)
             elif self.character == Character.GUARD:
@@ -108,22 +143,41 @@ class Player:
 
         return actions
 
-    def is_winner(self, win):
+    def is_winner(self, win, game=None):
         if self.is_spare():
             return False
         if self.is_dead():
             return False
+        if self.character == Character.VIZIER:
+            if self.is_hidden():
+                for neighbor_id in game.get_neighbors(self.user_id):
+                    if game.players[neighbor_id].is_winner(win):
+                        return True
+                return False
+            else:
+                if hasattr(game, 'manipulate_event'):
+                    return game.manipulate_event['support_team'] == win
+            return False
+        
+        if self.character == Character.PROPHET:
+            if self.is_hidden():
+                return False
+            if hasattr(game, 'predict_event'):
+                return game.predict_event['predict_team'] == win
+            return False
+
         if win == 'loyal':
             if self.character == Character.SLAVEDRIVER:
-                return self.is_not_hidden()
+                return self.is_known()
             elif self.character == Character.DANCER:
                 return self.is_hidden()
+
             return self.is_loyal()
         elif win == 'rebel':
             if self.character == Character.SLAVEDRIVER:
                 return self.is_hidden()
             elif self.character == Character.DANCER:
-                return self.is_not_hidden()
+                return self.is_known()
             return self.is_rebel()
         else:
             raise
@@ -241,44 +295,55 @@ class Player:
     """AI functions
     """
     def ai_action(self, game, manipulate=False):
-        if self.character == Character.SULTAN:
-            callback, target_id = self.ai_execute(game)
-            if callback or manipulate:
-                return Action.EXECUTE, [target_id]
-        
-        elif self.character == Character.GUARD:
-            callback, target_id = self.ai_detain(game)
-            if callback or manipulate:
-                return Action.DETAIN, [target_id]
-        
-        elif self.character == Character.ASSASSIN:
-            callback, target_id = self.ai_assassinate(game)
-            if callback or manipulate:
-                return Action.ASSASSINATE, [target_id]
-        
-        elif self.character == Character.SLAVE:
-            callback, target_id = self.ai_call(game)
-            if callback or manipulate:
-                return Action.CALL, [target_id]
+        if self.must_switch:
+            target_id = self.ai_switch(game, hide=self.is_known())
+            return Action.SWITCH, [target_id]
 
-        elif self.character == Character.SLAVEDRIVER:
-            callback, target_id = self.ai_capture(game)
-            if callback or manipulate:
-                return Action.CAPTURE, [target_id]
+        if manipulate or not self.is_exhaust():
+            if self.character == Character.SULTAN:
+                callback, target_id = self.ai_execute(
+                    game, manipulate=manipulate)
+                if callback:
+                    return Action.EXECUTE, [target_id]
+            
+            elif self.character == Character.GUARD:
+                callback, target_id = self.ai_detain(
+                    game, manipulate=manipulate)
+                if callback:
+                    return Action.DETAIN, [target_id]
+            
+            elif self.character == Character.ASSASSIN:
+                callback, target_id = self.ai_assassinate(
+                    game, manipulate=manipulate)
+                if callback:
+                    return Action.ASSASSINATE, [target_id]
+            
+            elif self.character == Character.SLAVE:
+                callback, target_id = self.ai_call(
+                    game, manipulate=manipulate)
+                if callback:
+                    return Action.CALL, [target_id]
 
-        elif self.character == Character.DANCER:
-            callback, target_id = self.ai_dance(game)
-            if callback or manipulate:
-                return Action.DANCE, [target_id]
+            elif self.character == Character.SLAVEDRIVER:
+                callback, target_id = self.ai_capture(
+                    game, manipulate=manipulate)
+                if callback:
+                    return Action.CAPTURE, [target_id]
 
-        elif self.character == Character.VIZIER:
-            callback, target_id = self.ai_support(game)
-            if callback:
-                return Action.MANIPULATE, [target_id]
+            elif self.character == Character.DANCER:
+                callback, target_id = self.ai_dance(
+                    game, manipulate=manipulate)
+                if callback:
+                    return Action.DANCE, [target_id]
 
-        elif self.character == Character.PROPHET:
-            callback, target_ids = self.ai_predict(game)
-            if callback or manipulate:
+            elif self.character == Character.VIZIER:
+                callback, target_id = self.ai_support(
+                    game, manipulate=manipulate)
+                if callback:
+                    return Action.MANIPULATE, [target_id]
+
+            elif self.character == Character.PROPHET:
+                target_ids = self.ai_peek(game, 3)
                 return Action.PREDICT, target_ids
 
         if random.random() > 0.5:
@@ -288,14 +353,16 @@ class Player:
             target_id = self.ai_switch(game, hide=self.is_known())
             return Action.SWITCH, [target_id]
 
-    def ai_peek(self, game):
+    def ai_peek(self, game, N=1):
         choices = game.can_be_peek_by(self.user_id)
         ### DEBUG MODE
         if self.debug:
             print('Peek choices: ' + \
                 ', '.join([game.players[i].status() for i in choices]))
         ###
-        return choices[random.randint(0, len(choices)-1)]
+        if N == 1:
+            return choices[random.randint(0, len(choices)-1)]
+        return random.sample(choices, min(N, len(choices)))
 
     def ai_switch(self, game, hide=False):
         choices = game.can_be_switch_by(self.user_id, hide=hide)
@@ -306,7 +373,7 @@ class Player:
         ###
         return choices[random.randint(0, len(choices)-1)]
 
-    def ai_execute(self, game):
+    def ai_execute(self, game, manipulate=False):
         choices = []
         for target_id, target_player in game.players.items():
             if target_player.can_be_execute():
@@ -318,17 +385,20 @@ class Player:
         ###
         if len(choices):
             return True, choices[random.randint(0, len(choices)-1)]
-        else:
-            return False, None
+        elif manipulate:
+            return True, None
+        return False, None
 
-    def ai_detain(self, game):
+    def ai_detain(self, game, manipulate=False):
         if self.neighbor_is_dancing(game):
+            if manipulate:
+                return True, None
             return False, None
         choices = []
         for target_id, target_player in game.players.items():
             if target_player.can_be_detain() \
-            and target_player.is_not_hidden() \
-            and target_player.is_rebel():
+            and (manipulate \
+            or (target_player.is_not_hidden() and target_player.is_rebel())):
                 choices.append(target_id)
         ### DEBUG MODE
         if self.debug:
@@ -337,10 +407,11 @@ class Player:
         ###
         if len(choices):
             return True, choices[random.randint(0, len(choices)-1)]
-        else:
-            return False, None
+        elif manipulate:
+            return True, None
+        return False, None
 
-    def ai_capture(self, game):
+    def ai_capture(self, game, manipulate=False):
         choices = []
         for target_id, target_player in game.players.items():
             if target_player.can_be_capture():
@@ -352,10 +423,11 @@ class Player:
         ###
         if len(choices):
             return True, choices[random.randint(0, len(choices)-1)]
-        else:
-            return False, None
+        elif manipulate:
+            return True, None
+        return False, None
 
-    def ai_manipulate(self, game):
+    def ai_manipulate(self, game, manipulate=False):
         choices = []
         for target_id, target_player in game.players.items():
             if target_player.can_be_manipulate():
@@ -370,12 +442,12 @@ class Player:
         else:
             return False, None
 
-    def ai_assassinate(self, game):
+    def ai_assassinate(self, game, manipulate=False):
         choices = []
         for target_id, target_player in game.players.items():
             if target_player.can_be_assassinate() \
-            and target_player.is_not_hidden() \
-            and target_player.is_loyal():
+            and (manipulate \
+            or (target_player.is_not_hidden() and target_player.is_loyal())):
                 choices.append(target_id)
         ### DEBUG MODE
         if self.debug:
@@ -384,22 +456,24 @@ class Player:
         ###
         if len(choices):
             return True, choices[random.randint(0, len(choices)-1)]
-        else:
-            return False, None
+        elif manipulate:
+            return True, None
+        return False, None
 
-    def ai_call(self, game):
+    def ai_call(self, game, manipulate=False):
         neighbors = game.get_neighbors(self.user_id)
 
         for target_id in neighbors:
             neighbor = game.players[target_id]
             if neighbor.is_not_hidden() and not neighbor.is_free_slave():
                 return False, None
-
         return True, None
 
-    def ai_dance(self, game):
+    def ai_dance(self, game, manipulate=False):
         if self.is_known():
             return False, None
+        elif manipulate:
+            return True, None
         
         neighbors = game.get_neighbors(self.user_id)
         for target_id in neighbors:
@@ -422,7 +496,13 @@ class Player:
         else:
             return False
 
-    def ai_support(self, game=None):
+    def ai_support(self, game=None, manipulate=False):
+        callback, _ = self.ai_manipulate(game)
+        if callback:
+            choices = ['loyal', 'rebel']
+            return True, choices[random.randint(0, len(choices)-1)]
+
+    def ai_predict(self, game=None, manipulate=False):
         choices = ['loyal', 'rebel']
         return True, choices[random.randint(0, len(choices)-1)]
 

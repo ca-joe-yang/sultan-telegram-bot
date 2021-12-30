@@ -136,7 +136,7 @@ class SultanManager:
             if self.debug:
                 print(f'Add ai')
             ###
-            while len(self.game.players) < 10:
+            while len(self.game.players) < 15:
                 # print(self.game.players)
                 self.game.add_player(ai=True)
         elif data == 'remove_ai' and self.is_admin(user_id):
@@ -273,7 +273,7 @@ class SultanManager:
             player_str = ', '.join([
                 f'{self.game.players[p].user_name}'\
                 for p in self.game.players  \
-                if self.game.players[p].is_winner('loyal')])
+                if self.game.players[p].is_winner('loyal', self.game)])
             self.send_announce(
                 f'[結束] 勝利玩家： {player_str}', name='end')
         elif self.game.winner == 'rebel':
@@ -282,11 +282,13 @@ class SultanManager:
             player_str = ', '.join([ 
                 f'{self.game.players[p].user_name}'\
                 for p in self.game.players \
-                if self.game.players[p].is_winner('rebel')])
+                if self.game.players[p].is_winner('rebel', self.game)])
             self.send_announce(
                 f'[結束] 勝利玩家： {player_str}', name='end')
         else:
             raise
+        self.draw_game_image()
+        self.send_visual('visual')
         # self.send_announce(f'[公告] 遊戲結束')
         self.game_state = GameState.IDLE
 
@@ -300,11 +302,14 @@ class SultanManager:
         self.send_announce(
             f'[回合{self.game.turn_id+1}] {cur_player.user_name}' ,
             name='turn')
+
+        if cur_player.is_ai():
+            time.sleep(2)
         
         if cur_player.throne_countdown is not None:
             cur_player.throne_countdown -= 1
         
-        if self.game.check_win_condition():
+        if self.game.check_win_condition(turn_start=True):
             self.end_game()
             return
 
@@ -334,8 +339,14 @@ class SultanManager:
         if self.game.check_win_condition():
             self.end_game()
             return
+        cur_player = self.game.current_player()
+        print(self.game.current_player().user_name)
+        if cur_player.is_exhaust():
+            cur_player.exhaust = False
 
         self.game.next_player()
+        print(self.game.current_player().user_name)
+
         self.start_turn()
 
     def ask_general(self, first=False):
@@ -347,6 +358,8 @@ class SultanManager:
             callback_data=GameAction.TUTORIAL.value, text=str(GameAction.TUTORIAL)))
         keyboard[1].append(tg.InlineKeyboardButton(
             callback_data=GameAction.SKIP.value, text=str(GameAction.SKIP)))
+        keyboard[1].append(tg.InlineKeyboardButton(
+            callback_data=GameAction.RESTART.value, text=str(GameAction.RESTART)))
 
         if first:
             self.game_state = GameState.CHECK
@@ -373,11 +386,18 @@ class SultanManager:
         action = GameAction(int(query.data))
 
         if action == GameAction.SKIP and self.is_admin(user_id) \
-        and self.game_state not in [GameState.IDLE, GameState.NO_GAME, GameState.REGISTER]:
+        and self.game_state.in_turn():
             self.send_announce(
-                f'[動作] {self.game.current_player().user_name} 回合被管理者跳過了',
+                f'[管理] {self.game.current_player().user_name} 回合被管理者跳過了',
                 name='turn')
             self.end_turn()
+
+        elif action == GameAction.RESTART and self.is_admin(user_id) \
+        and self.game_state.in_turn():
+            self.send_announce(
+                f'[管理] {self.game.current_player().user_name} 回合被管理者重啟了',
+                name='turn')
+            self.start_turn()
 
         elif action == GameAction.CHECK:
             info = self.game.get_player_information(
@@ -441,20 +461,19 @@ class SultanManager:
         if self.debug:
             print(f'Do action {query}')
         ###
-        from_player = self.game.current_player()
-        
         if query is not None:
             action = GameAction(int(query.data))
             from_id = query.from_user.id
             # print(action, self.msg_history['action_button'], from_id)
-            if from_id not in self.msg_history['action_button']['legal_ids'] \
+            if not (from_id in self.msg_history['action_button']['legal_ids'] \
             or (action == GameAction.THRONE \
-            and self.game.players[from_id].is_sultan()):
+            and self.game.players[from_id].is_sultan())):
                 return                
             ### DEBUG MODE
             if self.debug:
                 print(f'{query.data} {action}')
             ###
+        from_player = self.game.players[from_id]
 
         self.game_state = GameState.TURN_MID
         self.delete_message('action_button')
@@ -515,13 +534,29 @@ class SultanManager:
             if from_player.is_ai():
                 self.do_support(from_id=from_id, support_team=target_ids[0])
             else:
-                self.ask_support(from_id=from_id)
+                if not hasattr(self.game, 'manipulate_event'):
+                    self.ask_support(from_id=from_id)
+                else:
+                    self.ask_manipulate(from_id=from_id)
 
         elif action == GameAction.PREDICT:
+            if not hasattr(self.game, 'predict_event'):
+                self.game.predict_event = {
+                    'peeked': [],
+                    'predict_team': None,
+                    'choices': None,
+                }
             if from_player.is_ai():
-                self.do_predict(from_id=from_id, target_ids=target_ids)
+                if from_player.is_hidden():
+                    self.do_reveal(from_id)
+                for i in target_ids:
+                    self.do_peek(
+                        from_id=from_id, target_id=i, end=False)
+                predict_team = from_player.ai_predict(self.game)
+                self.do_predict(
+                    from_id=from_id, predict_team=predict_team)
             else:
-                self.ask_predict(from_id=from_id)
+                self.ask_predict_peek(from_id=from_id)
 
     def do_reveal(self, player_id):
         ### DEBUG MODE
@@ -550,10 +585,18 @@ class SultanManager:
         player = self.game.players[player_id]
         if player.is_known():
             if player.character == Character.VIZIER:
-                delattr(self, 'manipulate_event')
+                if hasattr(self.game, 'manipulate_event'):
+                    delattr(self.game, 'manipulate_event')
+            elif player.character == Character.PROPHET:
+                if hasattr(self.game, 'predict_event'):
+                    delattr(self.game, 'predict_event')
+            elif player.character == Character.SLAVEDRIVER:
+                self.do_release_slaves(user_id)
+            elif player.character == Character.SULTAN:
+                for _, player in self.game.players.items():
+                    player.throne_countdown = None
 
-
-            player.hidden = True
+        player.hidden = True
         
     def ask_peek(self, from_id):
         ### DEBUG MODE
@@ -571,7 +614,7 @@ class SultanManager:
             name='peek_button', legal_ids=[from_id]
         )
 
-    def do_peek(self, query=None, from_id=None, target_id=None):
+    def do_peek(self, query=None, from_id=None, target_id=None, end=True):
         ### DEBUG MODE
         if self.debug:
             print(f'Do peek')
@@ -601,7 +644,8 @@ class SultanManager:
             f'[動作] {player_1.user_name} 偷看了 {player_2.user_name} 的身份',
             name='turn'
         )
-        self.end_turn()
+        if end:
+            self.end_turn()
 
     def ask_switch(self, from_id):
         ### DEBUG MODE
@@ -661,6 +705,9 @@ class SultanManager:
                 query=query
             )
             player_1.memo = peek_message
+
+        if player_1.must_switch:
+            player_1.must_switch = False
 
         self.end_turn()
 
@@ -751,35 +798,50 @@ class SultanManager:
             if query.data == str(GameAction.CANCEL):
                 self.ask_action()
                 return
+            elif query.data == str(GameAction.GIVEUP):
+                target_id = None
             else:
                 target_id = int(query.data)
 
         player_1 = self.game.players[from_id]
-        player_2 = self.game.players[target_id]
 
-        if player_1.is_hidden():
-            self.do_reveal(from_id)
+        if player_1.neighbor_is_dancing(self.game):
+            self.send_pop_up(
+                f'[通知] 附近有舞孃 無法關押',
+                query=query)
+            self.ask_detain(from_id=from_id)
 
-        self.detain_event = {
-            'guard': from_id,
-            'suspect': target_id
-        }
 
-        message = f'[動作] {player_1.user_name} 嘗試關押 {player_2.user_name}'
-        self.send_announce(message, name='turn')
+        if target_id is not None:
+            player_2 = self.game.players[target_id]
 
-        suspect = self.game.players[target_id]
-        if suspect.is_ai():
-            self.do_detain_reaction(avoid_detain=suspect.ai_avoid_detain())
-        self.ask_detain_reaction()
+            if player_1.is_hidden():
+                self.do_reveal(from_id)
+
+            self.game.detain_event = {
+                'guard': from_id,
+                'suspect': target_id
+            }
+
+            message = f'[動作] {player_1.user_name} 嘗試關押 {player_2.user_name}'
+            self.send_announce(message, name='turn')
+
+            suspect = self.game.players[target_id]
+            if suspect.is_ai():
+                self.do_detain_reaction(avoid_detain=suspect.ai_avoid_detain())
+            else:
+                self.ask_detain_reaction()
+        else:
+            message = f'[動作] 沒有人可以關押，{player_1.user_name} 放棄了行動'
+            self.send_announce(message, name='turn')
 
     def ask_detain_reaction(self):
         ### DEBUG MODE
         if self.debug:
             print(f'Ask avoid detain')
         ###
-        guard = self.game.players[self.detain_event['guard']]
-        suspect = self.game.players[self.detain_event['suspect']]
+        guard = self.game.players[self.game.detain_event['guard']]
+        suspect = self.game.players[self.game.detain_event['suspect']]
 
         keyboard = [[
             tg.InlineKeyboardButton(callback_data=1, text='要'),
@@ -801,14 +863,16 @@ class SultanManager:
         if self.debug:
             print(f'Do avoid detain')
         ###
+        if not hasattr(self.game, 'detain_event'):
+            return
        
         if query is not None:
             if query.from_user.id not in self.msg_history['avoid_detain_button']['legal_ids']:
                 return
             avoid_detain = int(query.data) > 0
 
-        guard = self.game.players[self.detain_event['guard']]
-        suspect = self.game.players[self.detain_event['suspect']]
+        guard = self.game.players[self.game.detain_event['guard']]
+        suspect = self.game.players[self.game.detain_event['suspect']]
         
         if avoid_detain:
             if suspect.can_avoid_detain():
@@ -818,7 +882,7 @@ class SultanManager:
                 self.send_announce(
                     f'[動作] {suspect.character} {suspect.user_name} 避免了 守衛 {guard.user_name} 的關押',
                     name='turn')
-                self.detain_event.clear()
+                delattr(self.game, 'detain_event')
                 self.end_turn()
             else:
                 self.send_pop_up(f'[通知] 你不能避免關押', query=query)
@@ -828,7 +892,7 @@ class SultanManager:
             self.send_announce(
                 f'[動作] {guard.user_name} 關押了 {suspect.user_name}',
                 name='turn')
-            self.detain_event.clear()
+            delattr(self.game, 'detain_event')
             self.end_turn()
 
     def ask_assassinate(self, from_id):
@@ -872,7 +936,7 @@ class SultanManager:
         if player_1.is_hidden():
             self.do_reveal(from_id)
 
-        self.assassinate_event = {
+        self.game.assassinate_event = {
             'assassin': from_id,
             'victim': target_id,
             'protectors': set(
@@ -880,34 +944,28 @@ class SultanManager:
                 self.game.get_neighbors(target_id)),
             'answered': [],
         }
-        # try:
-        #     self.assassinate_event['protectors'].remove(from_id)
-        # if player_1_id in self.assassinate_event['protectors']:
-        #     self.assassinate_event['protectors'].remove(player_1_id)
-        # if player_2_id in self.assassinate_event['protectors']:
-        #     self.assassinate_event['protectors'].remove(player_2_id)
 
         message = f'[動作] {player_1.user_name} 嘗試刺殺 {player_2.user_name}'
         self.send_announce(message, name='turn')
 
-        for p in self.assassinate_event['protectors']:
+        self.ask_assassinate_reaction()
+        for p in self.game.assassinate_event['protectors']:
             player = self.game.players[p]
             if player.is_ai():
                 stop_assassinate = player.ai_stop_assassinate(self.game)
                 self.do_assassinate_reaction(
                     protector_id=player.user_id,
                     stop_assassinate=stop_assassinate)
-        self.ask_assassinate_reaction()
 
     def ask_assassinate_reaction(self):
         ### DEBUG MODE
         if self.debug:
             print(f'Ask stop assassinate')
         ###
-        assassin = self.game.players[self.assassinate_event['assassin']]
-        victim = self.game.players[self.assassinate_event['victim']]
+        assassin = self.game.players[self.game.assassinate_event['assassin']]
+        victim = self.game.players[self.game.assassinate_event['victim']]
         protectors = [ self.game.players[i] \
-            for i in self.assassinate_event['protectors']]
+            for i in self.game.assassinate_event['protectors']]
 
         keyboard = [[
             tg.InlineKeyboardButton(callback_data=1, text='要'),
@@ -922,7 +980,7 @@ class SultanManager:
         self.send_buttons(
             message,
             markup=tg.InlineKeyboardMarkup(keyboard),
-            name=name, legal_ids=self.assassinate_event['protectors']
+            name=name, legal_ids=self.game.assassinate_event['protectors']
         )
 
     def do_assassinate_reaction(self, query=None, stop_assassinate=False, protector_id=None):
@@ -933,12 +991,14 @@ class SultanManager:
         if query is not None:
             protector_id = query.from_user.id
             stop_assassinate = int(query.data) > 0
-        if protector_id not in self.assassinate_event['protectors'] \
-        or protector_id in self.assassinate_event['answered']:
+        if not hasattr(self.game, 'assassinate_event'):
+            return
+        if protector_id not in self.game.assassinate_event['protectors'] \
+        or protector_id in self.game.assassinate_event['answered']:
             return
 
-        assassin = self.game.players[self.assassinate_event['assassin']]
-        victim = self.game.players[self.assassinate_event['victim']]
+        assassin = self.game.players[self.game.assassinate_event['assassin']]
+        victim = self.game.players[self.game.assassinate_event['victim']]
         protector = self.game.players[protector_id]
 
         if stop_assassinate:
@@ -953,20 +1013,21 @@ class SultanManager:
                 self.send_announce(
                     f'[動作] {assassin.character} {assassin.user_name} 刺殺失敗 死亡',
                     name='turn')
-                self.assassinate_event.clear()
+                delattr(self.game, 'assassinate_event')
                 self.end_turn()
             else:
                 self.send_pop_up(f'[通知] 你不能阻止刺殺', query=query)
         else:
-            self.assassinate_event['answered'].append(protector_id)
-            if len(self.assassinate_event['answered']) == len(self.assassinate_event['protectors']):
+            self.game.assassinate_event['answered'].append(protector_id)
+            if len(self.game.assassinate_event['answered']) \
+            == len(self.game.assassinate_event['protectors']):
                 self.delete_message('stop_assassinate_button')
                 self.game.do_kill(victim.user_id)
                 self.do_reveal(victim.user_id)
                 self.send_announce(
                     f'[動作] {assassin.user_name} 刺殺了 {victim.user_name}',
                     name='turn')
-                self.assassinate_event.clear()
+                delattr(self.game, 'assassinate_event')
                 self.end_turn()
 
     def do_call(self, from_id=None):
@@ -982,7 +1043,7 @@ class SultanManager:
         self.send_announce(
             f'[動作] {from_player.user_name}: 我要革命！！！',
             name='turn')
-        self.revolution_event = {
+        self.game.revolution_event = {
             'answered': [from_player.user_id],
         }
         self.ask_join(from_id)
@@ -1020,13 +1081,13 @@ class SultanManager:
     def do_join(self, query=None, join_revolution=False, target_id=None):
         ### DEBUG MODE
         if self.debug:
-            print(f'Do join {self.revolution_event}')
+            print(f'Do join {self.game.revolution_event}')
             print(query, join_revolution, target_id)
         ###
         if query is not None:
             target_id = query.from_user.id
             join_revolution = int(query.data) > 0
-        if target_id in self.revolution_event['answered']:
+        if target_id in self.game.revolution_event['answered']:
             return
 
         # joined_players = self.game.players[self.revolution_event['joined']]
@@ -1037,19 +1098,19 @@ class SultanManager:
             if target_player.can_join():
                 if target_player.is_hidden():
                     self.do_reveal(target_id)
-                self.revolution_event['answered'].append(target_id)
+                self.game.revolution_event['answered'].append(target_id)
                 self.send_announce(
                     f'[動作] {target_player.user_name}: 我要革命！！！',
                     name='turn')    
             elif query is not None:
                 self.send_pop_up(f'[通知] 你不能響應', query=query)
         else:
-            self.revolution_event['answered'].append(target_id)
+            self.game.revolution_event['answered'].append(target_id)
             # self.send_announce(f'[動作] {target_player.user_name} 拒絕了革命請求')
 
-        if len(self.revolution_event['answered']) == len(self.game.player_orders):
+        if len(self.game.revolution_event['answered']) == len(self.game.player_orders):
             self.delete_message('join_button')
-            self.revolution_event.clear()
+            delattr(self.game, 'revolution_event')
             if self.game.check_win_condition(only_revolution=True):
                 self.end_game()
             else:
@@ -1135,20 +1196,19 @@ class SultanManager:
         ###
         from_player = self.game.players[from_id]
 
-        if not hasattr(self, 'manipulate_event'):
-            keyboard = [[
-                tg.InlineKeyboardButton(callback_data='loyal', text='保皇派'),
-                tg.InlineKeyboardButton(callback_data='royal', text='革命軍')],[
-            ], [
-                tg.InlineKeyboardButton(
-                    callback_data=GameAction.CANCEL.value, text=str(GameAction.CANCEL))
-            ]]
+        keyboard = [[
+            tg.InlineKeyboardButton(callback_data='loyal', text='保皇派'),
+            tg.InlineKeyboardButton(callback_data='royal', text='革命軍')],[
+        ], [
+            tg.InlineKeyboardButton(
+                callback_data=GameAction.CANCEL.value, text=str(GameAction.CANCEL))
+        ]]
 
-            self.send_buttons(
-                f"[詢問] {from_player.user_name} 你想要支持哪一派？",
-                markup=tg.InlineKeyboardMarkup(keyboard),
-                name='support_button', legal_ids=[from_id]
-            )
+        self.send_buttons(
+            f"[詢問] {from_player.user_name} 你想要支持哪一派？",
+            markup=tg.InlineKeyboardMarkup(keyboard),
+            name='support_button', legal_ids=[from_id]
+        )
 
     def do_support(self, query=None, from_id=None, support_team=None):
         ### DEBUG MODE
@@ -1170,10 +1230,14 @@ class SultanManager:
         if vizier.is_hidden():
             self.do_reveal(from_id)
 
-        self.manipulate_event = {
+        self.game.manipulate_event = {
             'vizier': from_id,
             'support_team': support_team
         }
+        team_str = '保皇派' if support_team == 'loyal' else '反叛軍'
+        self.send_announce(
+            f'[動作] 大官 {vizier.user_name} 公開支持 {team_str} 的獲勝',
+            name='turn')
         
         if vizier.is_ai():
             _, target_id = vizier.ai_manipulate(self.game)
@@ -1218,16 +1282,130 @@ class SultanManager:
         player_1 = self.game.players[from_id]
         player_2 = self.game.players[target_id]
 
-        self.manipulate_event['target'] = target_id
+        self.game.manipulate_event['target'] = target_id
 
         message = f'[動作] {player_1.user_name} 操弄了 {player_2.user_name} 強制進行動作'
         self.send_announce(message, name='turn')
         self.do_reveal(target_id)
-        self.ask_action(target_id, manipulate=True)
         player_2.exhaust = True
+        self.ask_action(target_id, manipulate=True)
 
+    def ask_predict_peek(self, from_id):
+        ### DEBUG MODE
+        if self.debug:
+            print(f'Ask predict peak')
+        ###
+
+        from_player = self.game.players[from_id]
+
+        choices = self.game.can_be_peek_by(from_player.user_id, predict=True)
+        keyboard = self.generate_keyboard_player(choices, cancel=True)
+
+        if not hasattr(self.game, 'predict_event'):
+            self.game.predict_event = {
+                'peeked': [],
+                'predict_team': None,
+                'choices': choices
+            }
+
+        message = f"[詢問] {from_player.user_name} 做出預言前 想要先偷看誰的身份(選三個)？"        
+        self.send_buttons(
+            message,
+            markup=tg.InlineKeyboardMarkup(keyboard),
+            name='predict_peek_button', legal_ids=[from_id]
+        )
+
+    def do_predict_peek(self, query):
+        ### DEBUG MODE
+        if self.debug:
+            print(f'Do predict peek')
+        ###
+        from_id = query.from_user.id
+        if from_id not in self.msg_history['predict_peek_button']['legal_ids']:
+            return
+        if query.data == str(GameAction.CANCEL):
+            self.ask_action()
+            if hasattr(self.game, 'predict_event'):
+                delattr(self.game, predict_event)
+            return
+        else:
+            target_id = int(query.data)
+    
+        if target_id in self.game.predict_event['peeked']:
+            self.game.predict_event['peeked'].remove(target_id)
+        else:
+            self.game.predict_event['peeked'].append(target_id)
+        peeked_players_str = ', '.join([ 
+            self.game.players[p].user_name for p in self.game.predict_event['peeked']] )
+        self.send_announce(
+            f'[詢問] 目前選到的角色有 {peeked_players_str}',
+            name='predict')
+
+        player_1 = self.game.players[from_id]
+        target_ids = self.game.predict_event['peeked']
+
+        if len(target_ids) == \
+            min(3, self.game.predict_event['choices']):
+            peek_message = ''
+            for target_id in target_ids:
+                player_2 = self.game.players[target_id]
+                peek_message += f'[通知] {player_2.user_name} 目前的身份是 {player_2.character}'
+
+                self.send_announce(
+                    f'[動作] {player_1.user_name} 偷看了 {player_2.user_name} 的身份',
+                    name='turn'
+                )
+            self.delete_message('predict_peek_button')
+            self.send_pop_up(
+                peek_message,
+                query=query
+            )
+            player_1.memo = peek_message
+
+            self.ask_predict(from_id=from_id)
+
+    def ask_predict(self, from_id):
+        ### DEBUG MODE
+        if self.debug:
+            print(f'Ask predict')
+        ###
+
+        from_player = self.game.players[from_id]
+
+        keyboard = [[
+            tg.InlineKeyboardButton(callback_data='loyal', text='保皇派'),
+            tg.InlineKeyboardButton(callback_data='royal', text='革命軍')],[
+        ]]
+
+        message = f"[詢問] {from_player.user_name} 你的預言是？"        
+        self.send_buttons(
+            message,
+            markup=tg.InlineKeyboardMarkup(keyboard),
+            name='predict_button', legal_ids=[from_id]
+        )
+
+    def do_predict(self, query=None, from_id=None, predict_team=None):
+        ### DEBUG MODE
+        if self.debug:
+            print(f'Do predict')
+        ###
+        if query is not None:
+            from_id = query.from_user.id
+            if from_id not in self.msg_history['predict_button']['legal_ids']:
+                return
+            predict_team = query.data
+        
+        self.game.predict_event['predict_team'] = predict_team
+
+        player_1 = self.game.players[from_id]
+        player_1.must_switch = True
+
+        team_str = '保皇派' if predict_team == 'loyal' else '反叛軍'
+        self.send_announce(
+            f'[動作] {player_1.user_name} 預言了 {team_str} 的獲勝',
+            name='turn'
+        )
         self.end_turn()
-
 
     def is_admin(self, user_id):
         return user_id == self.admin_id
@@ -1246,10 +1424,9 @@ class SultanManager:
                 i += 1
         if cancel:
             keyboard.append([])
-            keyboard[i].append(tg.InlineKeyboardButton(
+            keyboard[-1].append(tg.InlineKeyboardButton(
                 callback_data=str(GameAction.CANCEL), text=str(GameAction.CANCEL)))
-        else:
-            keyboard[i].append(tg.InlineKeyboardButton(
+            keyboard[-1].append(tg.InlineKeyboardButton(
                 callback_data=str(GameAction.GIVEUP), text=str(GameAction.GIVEUP)))
         return keyboard
 

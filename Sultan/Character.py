@@ -58,7 +58,7 @@ NEUTRAL_CHARACTERS = [
     Character.SLAVEDRIVER,
     Character.DANCER,
     Character.VIZIER,
-    # Character.PROPHET
+    Character.PROPHET
 ]
 
 CHARACTER_COUNT_DICTIONARY = {
