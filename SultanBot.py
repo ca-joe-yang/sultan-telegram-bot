@@ -159,7 +159,7 @@ def main():
     # Create the Updater and pass it your bot's token.
     # Make sure to set use_context=True to use the new context based callbacks
     # Post version 12 this will no longer be necessary
-    with open('bot.token', 'r') as f:
+    with open('test_bot.token', 'r') as f:
         updater = Updater(f.read().strip(), use_context=True)
 
     os.makedirs('user_pics', exist_ok=True)
