@@ -6,11 +6,11 @@ ACTION_CONFIG = {
     1: '<管理> 跳過',
     2: '<通用> 查看',
     3: '<通用> 教學',
-    4: '<一般> 取消',
+    4: '<選項> 取消',
     
-    11: '<一般> 公開',
-    12: '<一般> 偷看',
-    13: '<一般> 交換',
+    11: '<一般> 偷看',
+    12: '<一般> 交換',
+    13: '<身份> 公開',
 
     21: '<蘇丹> 處決',
     22: '<蘇丹> 登基',
@@ -23,6 +23,12 @@ ACTION_CONFIG = {
 
     61: '<販子> 抓捕',
     62: '<販子> 狩獵',
+
+    71: '<舞孃> 跳舞',
+
+    81: '<大官> 操弄',
+
+    91: '<先知> 預測',
 }
 
 class GameAction(Enum):
@@ -36,9 +42,11 @@ class GameAction(Enum):
     CANCEL = 4
     
     """Regular action"""
-    REVEAL = 11
-    PEEK = 12
-    SWITCH = 13
+    PEEK = 11
+    SWITCH = 12
+    REVEAL = 13
+
+    GIVEUP = 14
 
     """Sultan action"""
     EXECUTE = 21
@@ -55,7 +63,12 @@ class GameAction(Enum):
 
     """Slave driver action"""
     CAPTURE = 61
-    HUNT = 62
+
+    DANCE = 71
+
+    MANIPULATE = 81
+
+    PREDICT = 91
 
     @classmethod
     def _missing_(cls, value):

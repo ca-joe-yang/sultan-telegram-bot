@@ -79,55 +79,72 @@ class SultanBot:
         manager.draw_game_image()
         manager.send_visual('visual')
 
+    def command_refresh(self, update: Update, context: CallbackContext) -> None:
+        chat_id, user_id, _, _ = util.message_info(update.message)
+        if chat_id not in self.managers:
+            return
+        manager = self.managers[chat_id]
+        # TODO
+
     def button_handlers(self, update: Update, context: CallbackContext) -> None:
         query = update.callback_query
         chat_id, _, _, message_id = util.message_info(query.message)
         
         if chat_id not in self.managers:
             return
-        # print(query)
 
         manager = self.managers[chat_id]
         # print(manager.msg_history)
-        if message_id == manager.msg_history.setdefault('register_button', None):
+        if manager.button_id2name.setdefault(message_id, None) == 'register_button':
             if manager.game_state == GameState.REGISTER:
                 manager.do_register(query)
-        elif message_id == manager.msg_history.setdefault('general_button', None):
+        elif manager.button_id2name.setdefault(message_id, None) == 'general_button':
             if manager.game_state != GameState.NO_GAME:
                 manager.do_general(query)
-        elif message_id == manager.msg_history.setdefault('action_button', None):
+        elif manager.button_id2name.setdefault(message_id, None) == 'action_button':
             if manager.game_state == GameState.TURN_START:
                 manager.do_action(query)
-        elif message_id == manager.msg_history.setdefault('peek_button', None):
+        elif manager.button_id2name.setdefault(message_id, None) == 'peek_button':
             if manager.game_state == GameState.TURN_MID:
                 manager.do_peek(query)
-        elif message_id == manager.msg_history.setdefault('switch_button', None):
+        elif manager.button_id2name.setdefault(message_id, None) == 'switch_button':
             if manager.game_state == GameState.TURN_MID:
                 manager.do_switch(query)
-        elif message_id == manager.msg_history.setdefault('execute_button', None):
+        elif manager.button_id2name.setdefault(message_id, None) == 'execute_button':
             if manager.game_state == GameState.TURN_MID:
                 manager.do_execute(query)
-        elif message_id == manager.msg_history.setdefault('detain_button', None):
+        elif manager.button_id2name.setdefault(message_id, None) == 'detain_button':
             if manager.game_state == GameState.TURN_MID:
-                manager.do_detain_start(query)
-        elif message_id == manager.msg_history.setdefault('avoid_detain_button', None):
+                manager.do_detain(query)
+        elif manager.button_id2name.setdefault(message_id, None) == 'avoid_detain_button':
             if manager.game_state == GameState.AVOID_DETAIN:
-                manager.do_detain_end(query)
-        elif message_id == manager.msg_history.setdefault('assassinate_button', None):
+                manager.do_detain_reaction(query)
+        elif manager.button_id2name.setdefault(message_id, None) == 'assassinate_button':
             if manager.game_state == GameState.TURN_MID:
-                manager.do_assassinate_start(query)
-        elif message_id == manager.msg_history.setdefault('stop_assassinate_button', None):
+                manager.do_assassinate(query)
+        elif manager.button_id2name.setdefault(message_id, None) == 'stop_assassinate_button':
             if manager.game_state == GameState.STOP_ASSASSINATE:
-                manager.do_assassinate_end(query)
-        elif message_id == manager.msg_history.setdefault('join_button', None):
+                manager.do_assassinate_reaction(query)
+        elif manager.button_id2name.setdefault(message_id, None) == 'join_button':
             if manager.game_state == GameState.JOIN_REVOLUTION:
                 manager.do_join(query)
-        elif message_id == manager.msg_history.setdefault('capture_button', None):
+        elif manager.button_id2name.setdefault(message_id, None) == 'capture_button':
             if manager.game_state == GameState.TURN_MID:
                 manager.do_capture(query)
-        elif message_id == manager.msg_history.setdefault('hunt_button', None):
+        elif manager.button_id2name.setdefault(message_id, None) == 'support_button':
             if manager.game_state == GameState.TURN_MID:
-                manager.do_hunt(query)
+                manager.do_support(query)
+        elif manager.button_id2name.setdefault(message_id, None) == 'manipulate_button':
+            if manager.game_state == GameState.TURN_MID:
+                manager.do_manipulate(query)
+        elif manager.button_id2name.setdefault(message_id, None) == 'predict_peek_button':
+            if manager.game_state == GameState.TURN_MID:
+                manager.do_predict_peek(query)
+        elif manager.button_id2name.setdefault(message_id, None) == 'predict_button':
+            if manager.game_state == GameState.TURN_MID:
+                manager.do_predict(query)
+        else:
+            raise
 
     """ Admin function """
     def command_gamestate(self, update: Update, context: CallbackContext) -> None:
@@ -142,7 +159,7 @@ def main():
     # Create the Updater and pass it your bot's token.
     # Make sure to set use_context=True to use the new context based callbacks
     # Post version 12 this will no longer be necessary
-    with open('test_bot.token', 'r') as f:
+    with open('bot.token', 'r') as f:
         updater = Updater(f.read().strip(), use_context=True)
 
     os.makedirs('user_pics', exist_ok=True)
@@ -156,6 +173,7 @@ def main():
     dispatcher.add_handler(CommandHandler("general", game_bot.command_general))
     dispatcher.add_handler(CommandHandler("tutorial", game_bot.command_tutorial))
     dispatcher.add_handler(CommandHandler("visual", game_bot.command_visual))
+    dispatcher.add_handler(CommandHandler("refresh", game_bot.command_refresh))
 
     dispatcher.add_handler(CommandHandler("gamestate", game_bot.command_gamestate))
 

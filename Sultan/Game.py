@@ -10,11 +10,41 @@ from PIL import Image, ImageDraw, ImageFont
 DRAW_CONFIG = {
     6: [
         (0.15, 0.50),
-        (0.65, 0.20),
-        (0.65, 0.80),
+        (0.20, 0.65),
+        (0.75, 0.65),
         (0.80, 0.50),
-        (0.30, 0.80),
-        (0.30, 0.20)
+        (0.75, 0.35),
+        (0.20, 0.55)
+    ],
+    8: [
+        (0.25, 0.50),
+        (0.25, 0.75),
+        (0.50, 0.75),
+        (0.75, 0.75),
+        (0.75, 0.50),
+        (0.75, 0.25),
+        (0.50, 0.25),
+        (0.25, 0.25),
+    ],
+    10: [
+        (0.25, 0.20), (0.25, 0.40), (0.25, 0.60), (0.25, 0.80),
+        (0.50, 0.80),
+        (0.75, 0.80), (0.75, 0.60), (0.75, 0.40), (0.75, 0.20),
+        (0.50, 0.20),
+    ],
+    12: [
+        (0.25, 0.50),
+        (0.25, 0.68),
+        (0.25, 0.86),
+        (0.50, 0.86),
+        (0.75, 0.86),
+        (0.75, 0.68),
+        (0.75, 0.50),
+        (0.75, 0.32),
+        (0.75, 0.14),
+        (0.50, 0.14),
+        (0.25, 0.14),
+        (0.25, 0.32),
     ]
 }
 
@@ -44,15 +74,16 @@ class SultanGame:
         self.crown_token = None
         self.sultan_id = None
 
-        self.image_H = 512
-        self.image_W = 512
+        self.image_H = 500
+        self.image_W = 750
         self.game_image = Image.new("RGB", 
                 (self.image_W, self.image_H), (255, 255, 255))
 
     def draw_game_image(self):
         N = len(self.original_player_orders) - 1
         fontsize = int(self.image_H / 25)
-        font = ImageFont.truetype('TaipeiSansTCBeta-Bold.ttf', fontsize)  
+        font = ImageFont.truetype('TaipeiSansTCBeta-Bold.ttf', fontsize)
+        font2 = ImageFont.truetype('TaipeiSansTCBeta-Bold.ttf', self.image_H//8)
         game_draw = ImageDraw.Draw(self.game_image)
         for i, player_id in enumerate(self.original_player_orders[:-1]):
             player = self.players[player_id]
@@ -63,10 +94,30 @@ class SultanGame:
             player_x = int(
                 DRAW_CONFIG[N][i][1] * self.image_W - 0.5 * player.image_W)
             self.game_image.paste(player_img, (player_x, player_y))
+            
+            if player.is_dead():
+                game_draw.line(
+                    [(player_x, player_y), (player_x+player.image_W, player_y+player.image_H)], 
+                    fill="red", width=30) 
+                game_draw.line(
+                    [(player_x+player.image_W, player_y), (player_x, player_y+player.image_H)], 
+                    fill="red", width=30)
+            elif player.is_captured() or player.is_jail():
+                game_draw.line(
+                    [(player_x, player_y), (player_x+player.image_W, player_y+player.image_H)], 
+                    fill="black", width=30) 
+                game_draw.line(
+                    [(player_x+player.image_W, player_y), (player_x, player_y+player.image_H)], 
+                    fill="black", width=30) 
+            if player.is_known():
+                game_draw.text((int(player_x), int(player_y)), player.character.abbr(), 
+                    font=font2, 
+                    stroke_width=int(self.image_H/8/20), stroke_fill=(0,0,0))
 
-            text_x = player_x + fontsize * len(player.user_name) / 2
+            text_x = player_x #+ 0.5 * player.image_W
             text_y = player_y + player.image_H #- fontsize*(line_num-i)
-            game_draw.text((int(text_x), int(text_y)), player.user_name, 
+            sw, sh = 0, 0#game_draw.textsize(player.user_name)
+            game_draw.text((int(text_x-sw/2), int(text_y)), player.user_name, 
                     font=font, align ="center", 
                     stroke_width=int(fontsize/20), stroke_fill=(0,0,0))
 
@@ -151,6 +202,8 @@ class SultanGame:
                 if target_id not in self.player_orders and target_id != 0:
                     ret.append(
                         f'{self.players[target_id].status(verbose=user_id == target_id)}')
+        
+            ret.append(f'[備忘錄] {self.players[user_id].memo}')
         return ret
 
     def get_neighbors(self, user_id):
@@ -185,31 +238,6 @@ class SultanGame:
 
     def print_players_list(self):
         return ', '.join([self.players[p].user_name.strip() for p in self.players if p != 0])
-
-    def legal_actions(self):
-        legal_actions = [
-            GameAction.PEEK,
-            GameAction.SWITCH
-        ]
-
-        if self.current_player().is_hidden():
-            legal_actions.append(GameAction.REVEAL)
-        else:
-            if self.current_player().character == Character.SULTAN:
-                legal_actions.append(GameAction.EXECUTE)
-            elif self.current_player().character == Character.GUARD:
-                legal_actions.append(GameAction.DETAIN)
-            elif self.current_player().character == Character.ASSASSIN:
-                legal_actions.append(GameAction.ASSASSINATE)
-            elif self.current_player().character == Character.SLAVE:
-                legal_actions.append(GameAction.CALL)
-            elif self.current_player().character == Character.SLAVEDRIVER:
-                legal_actions.append(GameAction.CAPTURE)
-                legal_actions.append(GameAction.HUNT)
-
-        # legal_actions.append(GameAction.THRONE)
-
-        return legal_actions
 
     def can_be_peek_by(self, user_id):
         choices = []
@@ -264,15 +292,14 @@ class SultanGame:
                 choices.append(target_id)
         return choices
 
-    def can_be_hunt_by(self, user_id):
+    def can_be_manipulate_by(self, user_id):
         choices = []
         for target_id in self.player_orders:
             target_player = self.players[target_id]
             if user_id != target_id \
-            and target_player.can_be_hunt():
+            and target_player.can_be_manipulate():
                 choices.append(target_id)
         return choices
-
 
     def do_switch(self, player_1_id, player_2_id):
         if player_1_id != player_2_id:
