@@ -4,6 +4,7 @@ import random
 
 from PIL import Image, ImageDraw, ImageFont
 from .draw_utils import *
+import numpy as np
 
 AI_COUNT = 0
 
