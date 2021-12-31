@@ -1365,13 +1365,13 @@ class SultanManager:
             self.game.players[p].user_name for p in self.game.predict_event['peeked']] )
         self.send_announce(
             f'[詢問] 目前選到的角色有 {peeked_players_str}',
-            name='predict')
+            name='predict', refresh=True)
 
         player_1 = self.game.players[from_id]
         target_ids = self.game.predict_event['peeked']
 
         if len(target_ids) == \
-            min(3, self.game.predict_event['choices']):
+            min(3, len(self.game.predict_event['choices'])):
             peek_message = ''
             for target_id in target_ids:
                 player_2 = self.game.players[target_id]
