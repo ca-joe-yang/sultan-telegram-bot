@@ -16,6 +16,8 @@ class SultanGame:
         self.debug = debug
         self.image_H = 500
         self.image_W = 750
+        self.image_h = self.image_H//6
+        self.image_w = self.image_H//6
         self.reset()
 
     def check_state(self, state):
@@ -74,7 +76,9 @@ class SultanGame:
                     stroke_width=int(fontsize/20), stroke_fill=(0,0,0))
 
     def start_game(self):
-        self.players[0] = Player(user_id=0, user_name='白板', spare=True, debug=self.debug)
+        self.players[0] = Player(
+            user_id=0, user_name='白板', spare=True, debug=self.debug,
+            h=self.image_h, w=self.image_w)
         self.player_orders = [ user_id for user_id in self.players if user_id != 0 ]
         np.random.shuffle(self.player_orders)
 
@@ -172,9 +176,12 @@ class SultanGame:
         #         if target_id not in self.player_orders and target_id != 0:
         #             ret.append(
         #                 f'{self.players[target_id].status(verbose=user_id == target_id)}')
-        ret.append(f'{self.players[user_id].status(verbose=True)}')
-        if not game_over:   
-            ret.append(f'[備忘錄] {self.players[user_id].memo}')
+        if user_id in self.players:
+            ret.append(f'{self.players[user_id].status(verbose=True)}')
+            if not game_over:   
+                ret.append(f'[備忘錄] {self.players[user_id].memo}')
+        else:
+            ret.append('')
         return ret
 
     def get_neighbors(self, user_id):

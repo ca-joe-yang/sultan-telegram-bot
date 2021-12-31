@@ -86,6 +86,14 @@ class SultanBot:
         manager = self.managers[chat_id]
         # TODO
 
+    def command_set_sleep(self, update: Update, context: CallbackContext) -> None:
+        chat_id, user_id, _, _ = util.message_info(update.message)
+        options = update.message.text.split()
+        if chat_id not in self.managers:
+            return
+        manager = self.managers[chat_id]
+        manager.sleep = int(options[1])
+
     def button_handlers(self, update: Update, context: CallbackContext) -> None:
         query = update.callback_query
         chat_id, _, _, message_id = util.message_info(query.message)
@@ -174,6 +182,7 @@ def main():
     dispatcher.add_handler(CommandHandler("tutorial", game_bot.command_tutorial))
     dispatcher.add_handler(CommandHandler("visual", game_bot.command_visual))
     dispatcher.add_handler(CommandHandler("refresh", game_bot.command_refresh))
+    dispatcher.add_handler(CommandHandler("set_sleep", game_bot.command_set_sleep))
 
     dispatcher.add_handler(CommandHandler("gamestate", game_bot.command_gamestate))
 

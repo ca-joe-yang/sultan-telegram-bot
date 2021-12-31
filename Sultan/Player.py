@@ -346,7 +346,7 @@ class Player:
                 target_ids = self.ai_peek(game, 3)
                 return Action.PREDICT, target_ids
 
-        if random.random() > 0.5:
+        if random.random() > 0.8:
             target_id = self.ai_peek(game)
             return Action.PEEK, [target_id]
         else:

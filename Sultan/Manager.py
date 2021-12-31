@@ -22,6 +22,8 @@ class SultanManager:
         self.bot = bot
         self.chat_id = chat_id
 
+        self.sleep = 10
+
         with open('README.md', 'r') as f:
             self.tutorial_str  = f.read()
 
@@ -136,7 +138,7 @@ class SultanManager:
             if self.debug:
                 print(f'Add ai')
             ###
-            while len(self.game.players) < 15:
+            while len(self.game.players) < 10:
                 # print(self.game.players)
                 self.game.add_player(ai=True)
         elif data == 'remove_ai' and self.is_admin(user_id):
@@ -184,18 +186,19 @@ class SultanManager:
         ###
         query.answer(text=text, show_alert=True)
 
-    def send_private(self, text, user_id):
+    def send_private(self, text, user_id, name=None):
         ### DEBUG MODE
         if self.debug:
             print(f'[private] {user_id}: {text}')
         ###
         msg = self.bot.send_message(user_id, text)
-        self.msg_history[name] = {
-            'type': 'private',
-            'user_id': user_id,
-            'id': msg.message_id,
-            'text': text
-        }
+        # if name is not None:
+        # self.msg_history[name] = {
+        #     'type': 'private',
+        #     'user_id': user_id,
+        #     'id': msg.message_id,
+        #     'text': text
+        # }
 
     def send_buttons(self, text, markup, legal_ids=None, name=None):
         ### DEBUG MODE
@@ -260,6 +263,8 @@ class SultanManager:
             for p in self.game.player_orders ])
         self.send_announce(
             f'[開始] 玩家順序為 {player_order_str}', name='start')
+        self.draw_game_image()
+        self.send_visual('visual')
         self.ask_general(first=True)
 
     def end_game(self):
@@ -303,8 +308,10 @@ class SultanManager:
             f'[回合{self.game.turn_id+1}] {cur_player.user_name}' ,
             name='turn')
 
-        if cur_player.is_ai():
-            time.sleep(2)
+        self.draw_game_image()
+        self.send_visual('visual')
+        self.ask_general()
+
         
         if cur_player.throne_countdown is not None:
             cur_player.throne_countdown -= 1
@@ -328,6 +335,10 @@ class SultanManager:
             )
             self.end_turn()
             return
+
+        if cur_player.is_ai():
+            time.sleep(self.sleep)
+        
         self.ask_action()
 
     def end_turn(self):
@@ -350,6 +361,12 @@ class SultanManager:
         self.start_turn()
 
     def ask_general(self, first=False):
+        if 'general_button' in self.msg_history:
+            try:
+                self.delete_message('general_button')
+            except:
+                pass
+
         keyboard = [[], []]
 
         keyboard[0].append(tg.InlineKeyboardButton(
@@ -409,8 +426,6 @@ class SultanManager:
             and user_id not in self.checked_players:
                 self.checked_players.append(user_id)
                 if len(self.checked_players) == len(self.game.player_orders):
-                    self.draw_game_image()
-                    self.send_visual('visual')
                     self.start_turn()
 
         elif action == GameAction.TUTORIAL:
@@ -558,7 +573,7 @@ class SultanManager:
             else:
                 self.ask_predict_peek(from_id=from_id)
 
-    def do_reveal(self, player_id):
+    def do_reveal(self, player_id, verbose=True):
         ### DEBUG MODE
         if self.debug:
             print(f'Do reveal')
@@ -566,9 +581,10 @@ class SultanManager:
         player = self.game.players[player_id]
         if player.is_hidden():
             player.hidden = False
-            self.send_announce(
-                f'[動作] {player.user_name} 公開了他的身份為 {player.character}',
-                name='turn')
+            if verbose:
+                self.send_announce(
+                    f'[動作] {player.user_name} 公開了他的身份為 {player.character}',
+                    name='turn')
             
             if player.is_sultan():
                 self.game.sultan_id = player_id
@@ -1097,7 +1113,7 @@ class SultanManager:
         if join_revolution:
             if target_player.can_join():
                 if target_player.is_hidden():
-                    self.do_reveal(target_id)
+                    self.do_reveal(target_id, verbose=False)
                 self.game.revolution_event['answered'].append(target_id)
                 self.send_announce(
                     f'[動作] {target_player.user_name}: 我要革命！！！',
