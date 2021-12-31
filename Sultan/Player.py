@@ -51,7 +51,10 @@ class Player:
 
         self.image_H = h
         self.image_W = w
-        r, g, b = np.random.randint(0, 256, [3])
+        if spare:
+            r, g, b = 127, 127, 127
+        else:
+            r, g, b = np.random.randint(0, 256, [3])
         if profile_photo is None:
             self.profile_photo = Image.new("RGB", 
                 (self.image_W, self.image_H), (r, g, b))
