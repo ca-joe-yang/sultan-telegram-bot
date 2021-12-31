@@ -7,8 +7,6 @@ from .draw_utils import *
 
 AI_COUNT = 0
 
-
-
 class Player:
 
     def __init__(self, user_id=None, user_name=None, profile_photo=None,
@@ -380,6 +378,8 @@ class Player:
     def ai_execute(self, game, manipulate=False):
         choices = []
         for target_id, target_player in game.players.items():
+            if target_player.is_known() and target_player.character == Character.ASSASSIN:
+                return True, target_id
             if target_player.can_be_execute():
                 choices.append(target_id)
         ### DEBUG MODE
@@ -466,6 +466,8 @@ class Player:
         return False, None
 
     def ai_call(self, game, manipulate=False):
+        if manipulate:
+            return True, None
         if self.is_known():
             return False, None
         neighbors = game.get_neighbors(self.user_id)

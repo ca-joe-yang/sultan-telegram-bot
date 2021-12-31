@@ -9,9 +9,9 @@ from PIL import Image, ImageDraw, ImageFont
 from .draw_utils import *
 
 AI_NAME_CHOICES = [
-    '^朵朵', '^真喵', '^大紅', '^小豪', '^嶢哥', '^電腦', '^燒燒', '^小橘',
-    '^TaylorSwift', '^小黑', '^小白', '^Sheldon', '^Kevin', '^Lia', 
-    '^咖啡', '^黑鮪魚'
+    '朵朵', '真喵', '大紅', '小豪', '嶢哥', '電腦', '燒燒', '小橘',
+    '泰勒絲', '小黑', '小白', 'Sheldon', 'Kevin', 'Lia', 
+    '咖啡', '黑鮪魚', '家貓', '一夜干', '燉飯'
 ]
 
 class SultanGame:
@@ -216,7 +216,7 @@ class SultanGame:
             ai=False):
         if ai:
             player = Player(ai=True, 
-                user_name=self.AI_NAME_CHOICES[self.ai_count],
+                user_name=f'^{self.AI_NAME_CHOICES[self.ai_count]}',
                 debug=self.debug,
                 h=self.image_H//6, w=self.image_H//6)
             self.ai_count += 1
