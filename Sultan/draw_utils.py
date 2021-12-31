@@ -44,8 +44,33 @@ def draw_border(draw, x, y, w, h, fill='black', width=15):
         fill=fill, width=width) 
 
 def get_visual_layout_config(n):
-    if n < 8:
-        raise
+    if n == 5:
+        return [
+            (0.50, 0.15),
+            (0.85, 0.40),
+            (0.70, 0.85),
+            (0.30, 0.85),
+            (0.15, 0.40)
+        ]
+    elif n == 6:
+        return [
+            (0.50, 0.15),
+            (0.75, 0.30),
+            (0.75, 0.70),
+            (0.50, 0.85),
+            (0.25, 0.70),
+            (0.25, 0.30)
+        ]
+    elif n == 7:
+        return [
+            (0.167, 0.167), (0.500, 0.167), (0.833, 0.167),
+            (0.833, 0.500),
+            (0.750, 0.833), (0.250, 0.833),
+            (0.167, 0.500),
+        ]
+    
+    elif n == 7:
+        return get_visual_layout_config_rect(3, 2, 1+2)
     elif n == 8:
         return get_visual_layout_config_rect(3, 3, 1+2)
     elif n == 9:

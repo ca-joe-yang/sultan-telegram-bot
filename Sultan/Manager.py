@@ -138,7 +138,7 @@ class SultanManager:
             if self.debug:
                 print(f'Add ai')
             ###
-            for _ in range(5):
+            for _ in range(3):
                 # print(self.game.players)
                 self.game.add_player(ai=True)
         elif data == 'remove_ai' and self.is_admin(user_id):

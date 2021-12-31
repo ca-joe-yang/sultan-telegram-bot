@@ -15,7 +15,7 @@ class SultanGame:
     def __init__(self, debug=False):
         self.debug = debug
         self.image_H = 500
-        self.image_W = 750
+        self.image_W = 500
         self.image_h = self.image_H//6
         self.image_w = self.image_H//6
         self.reset()
@@ -45,10 +45,9 @@ class SultanGame:
 
     def draw_game_image(self):
         N = len(self.original_player_orders) - 1
-        fontsize = int(self.image_H / 25)
+        fontsize = int(self.image_H / 15)
         font = ImageFont.truetype('TaipeiSansTCBeta-Bold.ttf', fontsize)
         game_draw = ImageDraw.Draw(self.game_image)
-        layout_config = get_visual_layout_config(N)
         for i, player_id in enumerate(self.original_player_orders):
             player = self.players[player_id]
             win = self.winner is not None and player.is_winner(self.winner, self)
@@ -63,9 +62,9 @@ class SultanGame:
                     0.5 * self.image_W - 0.5 * player.image_W)
             else:
                 player_y = int(
-                    layout_config[i][1] * self.image_H - 0.5 * player.image_H)
+                    self.layout_config[i][1] * self.image_H - 0.5 * player.image_H)
                 player_x = int(
-                    layout_config[i][0] * self.image_W - 0.5 * player.image_W)
+                    self.layout_config[i][0] * self.image_W - 0.5 * player.image_W)
             self.game_image.paste(player_img, (player_x, player_y))
             
             text_x = player_x #+ 0.5 * player.image_W
@@ -104,6 +103,8 @@ class SultanGame:
 
         self.turn_id = 0
         self.current_player_index = 0
+        N = len(self.original_player_orders) - 1
+        self.layout_config = get_visual_layout_config(N)
 
     def check_win_condition(self, only_revolution=False, turn_start=False):
         ### DEBUG MODE
