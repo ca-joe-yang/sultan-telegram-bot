@@ -845,6 +845,8 @@ class SultanManager:
             suspect = self.game.players[target_id]
             if suspect.is_ai():
                 self.do_detain_reaction(avoid_detain=suspect.ai_avoid_detain())
+            elif suspect.is_known() and not suspect.can_avoid_detain():
+                self.do_detain_reaction(avoid_detain=False)
             else:
                 self.ask_detain_reaction()
         else:
@@ -1092,7 +1094,15 @@ class SultanManager:
                 if target_player.is_ai():
                     self.do_join(
                         join_revolution=target_player.ai_join(self.game), 
-                        target_id=i)        
+                        target_id=i) 
+                elif target_player.is_known() and not target_player.is_slave():
+                    self.do_join(
+                        join_revolution=False, 
+                        target_id=i)
+                elif target_player.is_known() and not target_player.is_slave():
+                    self.do_join(
+                        join_revolution=False, 
+                        target_id=i)         
 
     def do_join(self, query=None, join_revolution=False, target_id=None):
         ### DEBUG MODE

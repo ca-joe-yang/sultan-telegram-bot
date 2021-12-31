@@ -7,6 +7,8 @@ from .draw_utils import *
 
 AI_COUNT = 0
 
+
+
 class Player:
 
     def __init__(self, user_id=None, user_name=None, profile_photo=None,
@@ -16,7 +18,9 @@ class Player:
             global AI_COUNT
             AI_COUNT += 1
             self.user_id = -AI_COUNT
-            self.user_name = f'電腦{AI_COUNT}'
+            if user_name is None:
+                user_name = f'電腦{AI_COUNT}'
+            self.user_name = user_name
             self.ai = True
         else:
             self.user_id = user_id
@@ -447,7 +451,8 @@ class Player:
         for target_id, target_player in game.players.items():
             if target_player.can_be_assassinate() \
             and (manipulate \
-            or (target_player.is_not_hidden() and target_player.is_loyal())):
+            or (target_player.is_known() and \
+                (target_player.is_loyal() or target_player.character == Character.SLAVEDRIVER ))):
                 choices.append(target_id)
         ### DEBUG MODE
         if self.debug:
@@ -461,6 +466,8 @@ class Player:
         return False, None
 
     def ai_call(self, game, manipulate=False):
+        if self.is_known():
+            return False, None
         neighbors = game.get_neighbors(self.user_id)
 
         for target_id in neighbors:
@@ -514,7 +521,7 @@ class Player:
 
         for target_id in neighbors:
             neighbor = game.players[target_id]
-            if neighbor.is_hidden() or neighbor.is_free_slave():
+            if neighbor.is_free_slave():
                 return True
 
         return False

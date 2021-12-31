@@ -8,7 +8,11 @@ import random
 from PIL import Image, ImageDraw, ImageFont
 from .draw_utils import *
 
-
+AI_NAME_CHOICES = [
+    '^朵朵', '^真喵', '^大紅', '^小豪', '^嶢哥', '^電腦', '^燒燒', '^小橘',
+    '^TaylorSwift', '^小黑', '^小白', '^Sheldon', '^Kevin', '^Lia', 
+    '^咖啡', '^黑鮪魚'
+]
 
 class SultanGame:
 
@@ -29,6 +33,7 @@ class SultanGame:
 
     def reset(self):
         self.state = State.IDLE
+        self.ai_count = 0
 
         self.msg_id = {}
         self.players = {}
@@ -42,10 +47,12 @@ class SultanGame:
 
         self.game_image = Image.new("RGB", 
                 (self.image_W, self.image_H), (255, 255, 255))
+        self.AI_NAME_CHOICES = random.sample(AI_NAME_CHOICES, 15)
+        np.random.shuffle(self.AI_NAME_CHOICES)
 
     def draw_game_image(self):
         N = len(self.original_player_orders) - 1
-        fontsize = int(self.image_H / 15)
+        fontsize = int(self.image_H / 20)
         font = ImageFont.truetype('TaipeiSansTCBeta-Bold.ttf', fontsize)
         game_draw = ImageDraw.Draw(self.game_image)
         for i, player_id in enumerate(self.original_player_orders):
@@ -208,8 +215,11 @@ class SultanGame:
     def add_player(self, user_id=None, user_name=None, profile_photo=None, 
             ai=False):
         if ai:
-            player = Player(ai=True, debug=self.debug,
+            player = Player(ai=True, 
+                user_name=self.AI_NAME_CHOICES[self.ai_count],
+                debug=self.debug,
                 h=self.image_H//6, w=self.image_H//6)
+            self.ai_count += 1
             user_id = player.user_id
         else:
             player = Player(user_id, user_name, 
