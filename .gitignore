@@ -4,6 +4,8 @@ __pycache__/
 *$py.class
 
 config/
+user_pics/
+game_pics/
 
 # C extensions
 *.so
