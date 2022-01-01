@@ -1,25 +1,25 @@
 from PIL import Image, ImageDraw, ImageFont
 
-def draw_prison(draw, x, y, w, h):
+def draw_prison(draw, x, y, w, h, width=10):
     draw.line(
         [(x, y), (x, y+h)], 
-        fill="black", width=15) 
+        fill="black", width=width) 
     draw.line(
         [(x, y), (x+w, y)], 
-        fill="black", width=15) 
+        fill="black", width=width) 
     draw.line(
         [(x+w, y+h), (x, y+h)], 
-        fill="black", width=15) 
+        fill="black", width=width) 
     draw.line(
         [(x+w, y+h), (x+w, y)], 
-        fill="black", width=15) 
+        fill="black", width=width) 
 
     N = 3
     for i in range(1, N+1):
         x_ = int(x + i*w/(N+1))
         draw.line(
             [(x_, y), (x_, y+h)], 
-            fill="black", width=15) 
+            fill="black", width=width) 
 
 def draw_cross(draw, x, y, w, h):
     draw.line(

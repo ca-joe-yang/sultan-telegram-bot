@@ -7,12 +7,9 @@ import numpy as np
 import random
 from PIL import Image, ImageDraw, ImageFont
 from .draw_utils import *
+import os
 
-AI_NAME_CHOICES = [
-    '朵朵', '真喵', '大紅', '小豪', '嶢哥', '電腦', '燒燒', '小橘',
-    '泰勒絲', '小黑', '小白', 'Sheldon', 'Kevin', 'Lia', 
-    '咖啡', '黑鮪魚', '家貓', '一夜干', '燉飯'
-]
+AI_NAME_CHOICES = open('config/AI_NAME_CHOICES', 'r').read().split()
 
 class SultanGame:
 
@@ -215,10 +212,17 @@ class SultanGame:
     def add_player(self, user_id=None, user_name=None, profile_photo=None, 
             ai=False):
         if ai:
+            ai_user_name = self.AI_NAME_CHOICES[self.ai_count]
+            ai_photo_fname = f'user_pics/{ai_user_name}.jpg'
+            if os.path.isfile(ai_photo_fname):
+                profile_photo = Image.open(ai_photo_fname)
+
             player = Player(ai=True, 
-                user_name=f'^{self.AI_NAME_CHOICES[self.ai_count]}',
+                user_name=f'^{ai_user_name}',
                 debug=self.debug,
+                profile_photo=profile_photo,
                 h=self.image_H//6, w=self.image_H//6)
+            
             self.ai_count += 1
             user_id = player.user_id
         else:

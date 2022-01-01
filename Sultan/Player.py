@@ -237,6 +237,12 @@ class Player:
     def is_slave(self):
         return self.character == Character.SLAVE
 
+    def is_assassin(self):
+        return self.character == Character.ASSASSIN
+
+    def is_slavedriver(self):
+        return self.character == Character.SLAVEDRIVER
+
     def is_dancing(self):
         return self.character == Character.DANCER \
             and self.is_not_hidden() and self.is_alive() and self.is_free()
@@ -383,9 +389,9 @@ class Player:
     def ai_execute(self, game, manipulate=False):
         choices = []
         for target_id, target_player in game.players.items():
-            if target_player.is_known() and target_player.character == Character.ASSASSIN:
-                return True, target_id
             if target_player.can_be_execute():
+                if target_player.is_assassin():
+                    return True, target_id
                 choices.append(target_id)
         ### DEBUG MODE
         if self.debug:
@@ -405,10 +411,12 @@ class Player:
             return False, None
         choices = []
         for target_id, target_player in game.players.items():
-            if target_player.can_be_detain() \
-            and (manipulate \
-            or (target_player.is_not_hidden() and target_player.is_rebel())):
-                choices.append(target_id)
+            if target_player.can_be_detain():
+                if target_player.is_assassin():
+                    return True, target_id
+                if manipulate \
+                or (target_player.is_not_hidden() and target_player.is_rebel()):
+                    choices.append(target_id)
         ### DEBUG MODE
         if self.debug:
             print('Detain choices: ' + \
@@ -424,6 +432,8 @@ class Player:
         choices = []
         for target_id, target_player in game.players.items():
             if target_player.can_be_capture():
+                if target_player.is_free_slave():
+                    return True, target_id
                 choices.append(target_id)
         ### DEBUG MODE
         if self.debug:
@@ -452,13 +462,26 @@ class Player:
             return False, None
 
     def ai_assassinate(self, game, manipulate=False):
+        for target_id, target_player in game.players.items():
+            if target_player.can_be_assassinate():
+                if target_player.is_known() \
+                and target_player.is_sultan() \
+                and self.can_save_assassinate(target_id, game):
+                    return True, target_id
+        
+        for target_id, target_player in game.players.items():
+            if target_player.can_be_assassinate():
+                if target_player.is_known() \
+                and target_player.is_slavedriver() \
+                and self.can_save_assassinate(target_id, game):
+                    return True, target_id            
+
         choices = []
         for target_id, target_player in game.players.items():
-            if target_player.can_be_assassinate() \
-            and (manipulate \
-            or (target_player.is_known() and \
-                (target_player.is_loyal() or target_player.character == Character.SLAVEDRIVER ))):
-                choices.append(target_id)
+            if target_player.can_be_assassinate():
+                if manipulate \
+                or (target_player.is_known() and target_player.is_loyal()):
+                    choices.append(target_id)
         ### DEBUG MODE
         if self.debug:
             print('Assassinate choices: ' + \
@@ -469,6 +492,14 @@ class Player:
         elif manipulate:
             return True, None
         return False, None
+
+    def can_save_assassinate(self, target_id, game):
+        for p in game.get_neighbors(target_id):
+            if game.players[p].is_known() \
+            and game.players[p].can_stop_assassinate(game):
+                return False
+        return True
+
 
     def ai_call(self, game, manipulate=False):
         if manipulate:
